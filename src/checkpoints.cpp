@@ -15,9 +15,11 @@
 
 namespace Checkpoints {
 
+// 获取配置参数中一个检查点;
 CBlockIndex *GetLastCheckpoint(const CCheckpointData &data) {
     const MapCheckpoints &checkpoints = data.mapCheckpoints;
 
+    // 从后往前(从高块向低块)，查找检查点，当一个检查点在全局状态中找到时，就将它的块索引返回
     for (const MapCheckpoints::value_type &i :
          boost::adaptors::reverse(checkpoints)) {
         const uint256 &hash = i.second;

@@ -30,7 +30,9 @@ static const unsigned int MAX_STANDARD_TX_SIZE = 100000;
 static const unsigned int MAX_P2SH_SIGOPS = 15;
 /** The maximum number of sigops we're willing to relay/mine in a single tx */
 static const unsigned int MAX_STANDARD_TX_SIGOPS = MAX_TX_SIGOPS_COUNT / 5;
-/** Default for -maxmempool, maximum megabytes of mempool memory usage */
+/** Default for -maxmempool, maximum megabytes of mempool memory usage
+ * 交易池默认的最大的内存使用量
+ * */
 static const unsigned int DEFAULT_MAX_MEMPOOL_SIZE = 300;
 /** Default for -incrementalrelayfee, which sets the minimum feerate increase
  * for mempool limiting or BIP 125 replacement **/
@@ -56,6 +58,8 @@ static const Amount DUST_RELAY_TX_FEE(1000);
  * Standard script verification flags that standard transactions will comply
  * with. However scripts violating these flags may still be present in valid
  * blocks and we must accept those blocks.
+ * 标准的脚本验证flag，标准交易应该采用该标识执行脚本验证。但是违反该标志的脚本可能仍然存
+ * 在于有效的区块中，所以我们也必须接收这些区块
  */
 static const unsigned int STANDARD_SCRIPT_VERIFY_FLAGS =
     MANDATORY_SCRIPT_VERIFY_FLAGS | SCRIPT_VERIFY_DERSIG |
@@ -65,7 +69,9 @@ static const unsigned int STANDARD_SCRIPT_VERIFY_FLAGS =
     SCRIPT_VERIFY_CHECKSEQUENCEVERIFY | SCRIPT_VERIFY_LOW_S |
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM;
 
-/** For convenience, standard but not mandatory verify flags. */
+/** For convenience, standard but not mandatory verify flags.
+ * 基于方便起见，标准但非强制性的验证标志。。。(非标准的验证flags，少一个验证规则)
+ * */
 static const unsigned int STANDARD_NOT_MANDATORY_VERIFY_FLAGS =
     STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS;
 

@@ -49,15 +49,19 @@ class TxInUndoDeserializer {
 public:
     TxInUndoDeserializer(Coin *pcoinIn) : pcoin(pcoinIn) {}
 
+    //反序列化
     template <typename Stream> void Unserialize(Stream &s) {
         uint32_t nCode = 0;
+        // 从数据流中读取一个变长数据
         ::Unserialize(s, VARINT(nCode));
+        // 计算coin的高度
         uint32_t nHeight = nCode / 2;
+        // 判断是否为coinbase交易
         bool fCoinBase = nCode & 1;
         if (nHeight > 0) {
             // Old versions stored the version number for the last spend of a
             // transaction's outputs. Non-final spends were indicated with
-            // height = 0.
+            // height = 0. 旧版本存储最后一次交易输出的花费版本。非最终花费用高度0标识。
             int nVersionDummy;
             ::Unserialize(s, VARINT(nVersionDummy));
         }
@@ -72,10 +76,12 @@ public:
 static const size_t MAX_INPUTS_PER_TX =
     MAX_TX_SIZE / ::GetSerializeSize(CTxIn(), SER_NETWORK, PROTOCOL_VERSION);
 
-/** Restore the UTXO in a Coin at a given COutPoint */
+/** Restore the UTXO in a Coin at a given COutPoint
+ * 根据一个给定的 COutPoint 从UTXO中 还原一个Coin
+ * */
 class CTxUndo {
 public:
-    // Undo information for all txins
+    // Undo information for all txins  交易的undo信息；存储的是UTXO信息
     std::vector<Coin> vprevout;
 
     template <typename Stream> void Serialize(Stream &s) const {
@@ -99,9 +105,11 @@ public:
             ::Unserialize(s, REF(TxInUndoDeserializer(&prevout)));
         }
     }
+
+
 };
 
-/** Undo information for a CBlock */
+/** Undo information for a CBlock  一个区块的 undo信息*/
 class CBlockUndo {
 public:
     // For all but the coinbase
@@ -137,6 +145,7 @@ DisconnectResult UndoCoinSpend(const Coin &undo, CCoinsViewCache &view,
 /**
  * Undo a block from the block and the undoblock data.
  * See DisconnectBlock for more details.
+ *
  */
 DisconnectResult ApplyBlockUndo(const CBlockUndo &blockUndo,
                                 const CBlock &block, const CBlockIndex *pindex,

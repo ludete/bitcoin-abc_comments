@@ -11,6 +11,7 @@
 
 #include <boost/test/unit_test.hpp>
 #include <boost/thread.hpp>
+///Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/test/cuckoocache_tests.cpp
 
 /** Test Suite for CuckooCache
  *
@@ -24,7 +25,7 @@
  *  expected behavior. For example improving the hit rate may cause some tests
  *  using BOOST_CHECK_CLOSE to fail.
  */
-FastRandomContext insecure_rand(true);
+FastRandomContext  insecure_rand(true);
 
 BOOST_AUTO_TEST_SUITE(cuckoocache_tests);
 

@@ -37,11 +37,14 @@ enum {
     // Passing a non-strict-DER signature or one with undefined hashtype to a
     // checksig operation causes script failure. Evaluating a pubkey that is not
     // (0x04 + 64 bytes) or (0x02 or 0x03 + 32 bytes) by checksig causes script
-    // failure.
+    // failure.in
+    // 在签名检查中，传递一个非严格DER编码的签名或一个未定义的哈希类型，都可能脚本验证失败。
+    // 通过评估公钥非上述那两种格式，都可能会导致脚本验证失败。
     SCRIPT_VERIFY_STRICTENC = (1U << 1),
 
     // Passing a non-strict-DER signature to a checksig operation causes script
     // failure (softfork safe, BIP62 rule 1)
+    // 向签名检查中传递一个非DER签名，会导致验证失败(BIP62)
     SCRIPT_VERIFY_DERSIG = (1U << 2),
 
     // Passing a non-strict-DER signature or one with S > order/2 to a checksig
@@ -67,7 +70,7 @@ enum {
     SCRIPT_VERIFY_MINIMALDATA = (1U << 6),
 
     // Discourage use of NOPs reserved for upgrades (NOP1-10)
-    //
+    // 阻止使用 用于升级的NOPs类的操作码。
     // Provided so that nodes can avoid accepting or mining transactions
     // containing executed NOP's whose meaning may change after a soft-fork,
     // thus rendering the script invalid; with this flag set executing

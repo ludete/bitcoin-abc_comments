@@ -175,6 +175,7 @@ void CCoinsViewDBCursor::Next() {
     }
 }
 
+//将要删除的所有文件信息，当前最新文件，所有删除的块索引信息，都写入数据库
 bool CBlockTreeDB::WriteBatchSync(
     const std::vector<std::pair<int, const CBlockFileInfo *>> &fileInfo,
     int nLastFile, const std::vector<const CBlockIndex *> &blockinfo) {

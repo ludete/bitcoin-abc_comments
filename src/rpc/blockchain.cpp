@@ -1156,7 +1156,7 @@ UniValue verifychain(const Config &config, const JSONRPCRequest &request) {
     return CVerifyDB().VerifyDB(config, Params(), pcoinsTip, nCheckLevel,
                                 nCheckDepth);
 }
-
+///Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/rpc/blockchain.cpp
 /** Implementation of IsSuperMajority with better feedback */
 static UniValue SoftForkMajorityDesc(int version, CBlockIndex *pindex,
                                      const Consensus::Params &consensusParams) {

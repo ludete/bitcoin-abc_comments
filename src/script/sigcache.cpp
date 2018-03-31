@@ -20,6 +20,8 @@ namespace {
  * Valid signature cache, to avoid doing expensive ECDSA signature checking
  * twice for every transaction (once when accepted into memory pool, and
  * again when accepted into the block chain)
+ * 有效的签名缓存，避免对每个交易做多次昂贵的签名检测。(一旦交易被交易池接收，并下次被块链接收时，
+ * 就可以不用再进行交易检查了。)
  */
 class CSignatureCache {
 private:

@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #endif
 
+//网络类型
 namespace NetMsgType {
 const char *VERSION = "version";
 const char *VERACK = "verack";
@@ -43,6 +44,7 @@ const char *BLOCKTXN = "blocktxn";
 
 /** All known message types. Keep this in the same order as the list of
  * messages above and in protocol.h.
+ * 保持这个顺序，与上面的消息列表和 .h中定义的顺序相同。
  */
 static const std::string allNetMessageTypes[] = {
     NetMsgType::VERSION,     NetMsgType::VERACK,     NetMsgType::ADDR,
@@ -55,6 +57,8 @@ static const std::string allNetMessageTypes[] = {
     NetMsgType::FEEFILTER,   NetMsgType::SENDCMPCT,  NetMsgType::CMPCTBLOCK,
     NetMsgType::GETBLOCKTXN, NetMsgType::BLOCKTXN,
 };
+
+// 存储所有的消息类型
 static const std::vector<std::string>
     allNetMessageTypesVec(allNetMessageTypes,
                           allNetMessageTypes + ARRAYLEN(allNetMessageTypes));
@@ -69,13 +73,18 @@ CMessageHeader::CMessageHeader(const MessageStartChars &pchMessageStartIn) {
 CMessageHeader::CMessageHeader(const MessageStartChars &pchMessageStartIn,
                                const char *pszCommand,
                                unsigned int nMessageSizeIn) {
+    //拷贝报头的magic信息
     memcpy(pchMessageStart, pchMessageStartIn, MESSAGE_START_SIZE);
+    //拷贝命令信息
     memset(pchCommand, 0, sizeof(pchCommand));
     strncpy(pchCommand, pszCommand, COMMAND_SIZE);
+    // 消息的长度
     nMessageSize = nMessageSizeIn;
+    // 初始化校验和
     memset(pchChecksum, 0, CHECKSUM_SIZE);
 }
 
+//获取报头的命令
 std::string CMessageHeader::GetCommand() const {
     return std::string(pchCommand,
                        pchCommand + strnlen(pchCommand, COMMAND_SIZE));
@@ -96,7 +105,7 @@ bool CMessageHeader::IsValid(const MessageStartChars &pchMessageStartIn) const {
             return false;
     }
 
-    // Message size
+    // Message size; 消息太大，无效
     if (nMessageSize > MAX_SIZE) {
         LogPrintf("CMessageHeader::IsValid(): (%s, %u bytes) nMessageSize > "
                   "MAX_SIZE\n",

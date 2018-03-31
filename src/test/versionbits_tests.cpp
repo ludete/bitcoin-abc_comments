@@ -40,7 +40,7 @@ public:
 
     ThresholdState GetStateFor(const CBlockIndex *pindexPrev) const {
         return AbstractThresholdConditionChecker::GetStateFor(
-            pindexPrev, paramsDummy, cache);
+            pindexPrev, paramsDummy,  o0-);
     }
     int GetStateSinceHeightFor(const CBlockIndex *pindexPrev) const {
         return AbstractThresholdConditionChecker::GetStateSinceHeightFor(
@@ -80,8 +80,10 @@ public:
 
     ~VersionBitsTester() { Reset(); }
 
+    //挖块，
     VersionBitsTester &Mine(unsigned int height, int32_t nTime,
                             int32_t nVersion) {
+        //1. 当前的链含有的block数量 < height ,进入挖块逻辑， 直到含有的块数等于传入的块高度
         while (vpblock.size() < height) {
             CBlockIndex *pindex = new CBlockIndex();
             pindex->nHeight = vpblock.size();

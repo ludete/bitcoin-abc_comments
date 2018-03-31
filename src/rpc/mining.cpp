@@ -811,7 +811,7 @@ static UniValue getblocktemplate(const Config &config,
         Pair("mintime", (int64_t)pindexPrev->GetMedianTimePast() + 1));
     result.push_back(Pair("mutable", aMutable));
     result.push_back(Pair("noncerange", "00000000ffffffff"));
-    // FIXME: Allow for mining block greater than 1M.
+    // FIXME: Allow for mining block greater than 1M.  允许挖出大于1M的块
     result.push_back(
         Pair("sigoplimit", GetMaxBlockSigOpsCount(DEFAULT_MAX_BLOCK_SIZE)));
     result.push_back(Pair("sizelimit", DEFAULT_MAX_BLOCK_SIZE));

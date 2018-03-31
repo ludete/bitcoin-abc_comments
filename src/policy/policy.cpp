@@ -45,6 +45,7 @@ bool IsStandard(const CScript &scriptPubKey, txnouttype &whichType) {
     return whichType != TX_NONSTANDARD;
 }
 
+//检查是否为标准交易
 bool IsStandardTx(const CTransaction &tx, std::string &reason) {
     if (tx.nVersion > CTransaction::MAX_STANDARD_VERSION || tx.nVersion < 1) {
         reason = "version";
@@ -106,30 +107,35 @@ bool IsStandardTx(const CTransaction &tx, std::string &reason) {
     return true;
 }
 
+//是标准的交易输入
 bool AreInputsStandard(const CTransaction &tx,
                        const CCoinsViewCache &mapInputs) {
+    //coinbase交易通常不使用UTXO集合。
     if (tx.IsCoinBase()) {
         // Coinbases don't use vin normally.
         return true;
     }
 
+    //遍历交易输入；
     for (unsigned int i = 0; i < tx.vin.size(); i++) {
+        //1. 获取 引用输入对应的 锁定输出信息。
         const CTxOut &prev = mapInputs.GetOutputFor(tx.vin[i]);
 
         std::vector<std::vector<uint8_t>> vSolutions;
         txnouttype whichType;
-        // get the scriptPubKey corresponding to this input:
+        //2. get the scriptPubKey corresponding to this input: 获取交易输入对应的锁定脚本
         const CScript &prevScript = prev.scriptPubKey;
+        //3. 解析脚本，出错直接返回false。
         if (!Solver(prevScript, whichType, vSolutions)) return false;
 
         if (whichType == TX_SCRIPTHASH) {
             std::vector<std::vector<uint8_t>> stack;
             // convert the scriptSig into a stack, so we can inspect the
-            // redeemScript
+            // redeemScript； 将签名转换到stack中，用来检查赎回脚本；用来验证赎回脚本
             if (!EvalScript(stack, tx.vin[i].scriptSig, SCRIPT_VERIFY_NONE,
                             BaseSignatureChecker()))
                 return false;
-            if (stack.empty()) return false;
+            if (stack.empty()) return false;    //标识验证出错
             CScript subscript(stack.back().begin(), stack.back().end());
             if (subscript.GetSigOpCount(true) > MAX_P2SH_SIGOPS) {
                 return false;
@@ -140,6 +146,7 @@ bool AreInputsStandard(const CTransaction &tx,
     return true;
 }
 
+// 默认的指定费率
 CFeeRate incrementalRelayFee = CFeeRate(DEFAULT_INCREMENTAL_RELAY_FEE);
 CFeeRate dustRelayFee = CFeeRate(DUST_RELAY_TX_FEE);
 unsigned int nBytesPerSigOp = DEFAULT_BYTES_PER_SIGOP;

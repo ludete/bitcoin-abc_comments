@@ -344,7 +344,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity) {
         bool spendsCoinbase = (i == 0) ? true : false;
         // If we do set the # of sig ops in the CTxMemPoolEntry, template
         // creation passes.
-        mempool.addUnchecked(hash, entry.Fee(LOWFEE)
+        mempool.addUnchecked(hash,v entry.Fee(LOWFEE)
                                        .Time(GetTime())
                                        .SpendsCoinbase(spendsCoinbase)
                                        .SigOpsCost(80)

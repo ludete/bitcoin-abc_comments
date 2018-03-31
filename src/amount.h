@@ -120,6 +120,7 @@ inline bool MoneyRange(const Amount nValue) {
 
 /**
  * Fee rate in satoshis per kilobyte: Amount / kB
+ * 每千字节费率
  */
 class CFeeRate {
 private:

@@ -17,6 +17,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+// 创建一个块；
 static CBlock makeLargeDummyBlock(const size_t num_tx) {
     CBlock block;
     block.vtx.reserve(num_tx);
@@ -33,7 +34,9 @@ BOOST_FIXTURE_TEST_SUITE(validation_tests, TestingSetup)
 /** Test that LoadExternalBlockFile works with the buffer size set
 below the size of a large block. Currently, LoadExternalBlockFile has the
 buffer size for CBufferedFile set to 2 * MAX_TX_SIZE. Test with a value
-of 10 * MAX_TX_SIZE. */
+of 10 * MAX_TX_SIZE.
+
+ */
 BOOST_AUTO_TEST_CASE(validation_load_external_block_file) {
     boost::filesystem::path tmpfile_name =
         pathTemp / strprintf("vlebf_test_%lu_%i", (unsigned long)GetTime(),

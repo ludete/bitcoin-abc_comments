@@ -89,9 +89,9 @@ BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test) {
     }
 
     for (int j = 0; j < 1000; j++) {
-        CBlockIndex *p1 = &blocks[GetRand(10000)];
-        CBlockIndex *p2 = &blocks[GetRand(10000)];
-        CBlockIndex *p3 = &blocks[GetRand(10000)];
+        CBlockIndex *p1 = &blocks[1000];
+        CBlockIndex *p2 = &blocks[2000];
+        CBlockIndex *p3 = &blocks[3000];
 
         int64_t tdiff = GetBlockProofEquivalentTime(*p1, *p2, *p3, params);
         BOOST_CHECK_EQUAL(tdiff, p1->GetBlockTime() - p2->GetBlockTime());
@@ -153,6 +153,7 @@ BOOST_AUTO_TEST_CASE(retargeting_test) {
     BOOST_CHECK_EQUAL(
         GetNextWorkRequired(&blocks[110], &blkHeaderDummy, params),
         currentPow.GetCompact());
+
 
     // As we continue with 2h blocks, difficulty continue to decrease.
     blocks[111] =
@@ -320,6 +321,7 @@ BOOST_AUTO_TEST_CASE(cash_difficulty_test) {
         BOOST_CHECK((nextTarget - currentTarget) < (currentTarget >> 3));
 
         nBits = nextBits;
+
     }
 
     // Check the actual value.

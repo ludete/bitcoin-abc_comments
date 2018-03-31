@@ -16,19 +16,19 @@
 
 class CBlockFileInfo {
 public:
-    //!< number of blocks stored in file
+    //!< number of blocks stored in file； 文件中区块的数量
     unsigned int nBlocks;
-    //!< number of used bytes of block file
+    //!< number of used bytes of block file 区块文件中的字节数
     unsigned int nSize;
-    //!< number of used bytes in the undo file
+    //!< number of used bytes in the undo file  undo文件中的字节数
     unsigned int nUndoSize;
-    //!< lowest height of block in file
+    //!< lowest height of block in file  该文件中最低的区块号
     unsigned int nHeightFirst;
-    //!< highest height of block in file
+    //!< highest height of block in file    该文件中最高的区块号
     unsigned int nHeightLast;
-    //!< earliest time of block in file
+    //!< earliest time of block in file     该文件中最早的区块时间
     uint64_t nTimeFirst;
-    //!< latest time of block in file
+    //!< latest time of block in file       该文件中最后的区块时间
     uint64_t nTimeLast;
 
     ADD_SERIALIZE_METHODS;
@@ -58,7 +58,7 @@ public:
 
     std::string ToString() const;
 
-    /** update statistics (does not update nSize) */
+    /** update statistics (does not update nSize) 更新文件的信息*/
     void AddBlock(unsigned int nHeightIn, uint64_t nTimeIn) {
         if (nBlocks == 0 || nHeightFirst > nHeightIn) {
             nHeightFirst = nHeightIn;
@@ -120,11 +120,13 @@ enum BlockStatus : uint32_t {
 
     //! Parsed, version ok, hash satisfies claimed PoW, 1 <= vtx count <= max,
     //! timestamp not in future
-    BLOCK_VALID_HEADER = 1,
+    BLOCK_VALID_HEADER = 1,     // 01
 
     //! All parent headers found, difficulty matches, timestamp >= median
     //! previous, checkpoint. Implies all parents are also at least TREE.
-    BLOCK_VALID_TREE = 2,
+    // 当一个块的索引处于该状态时，标识：该区块的所有父区块都已被接收(在全局状态中存储)，且该块工作量，时间戳，检查点都正确。
+    // 当一个块的索引处于该状态时，标识它的所有父区块都已最少处于该状态
+    BLOCK_VALID_TREE = 2,       // 10
 
     /**
      * Only first tx is coinbase, 2 <= coinbase input script length <= 100,
@@ -133,32 +135,32 @@ enum BlockStatus : uint32_t {
      * When all parent blocks also have TRANSACTIONS, CBlockIndex::nChainTx will
      * be set.
      */
-    BLOCK_VALID_TRANSACTIONS = 3,
+    BLOCK_VALID_TRANSACTIONS = 3,   //11
 
     //! Outputs do not overspend inputs, no double spends, coinbase output ok,
     //! no immature coinbase spends, BIP30.
     //! Implies all parents are also at least CHAIN.
-    BLOCK_VALID_CHAIN = 4,
+    BLOCK_VALID_CHAIN = 4,          //100
 
     //! Scripts & signatures ok. Implies all parents are also at least SCRIPTS.
-    BLOCK_VALID_SCRIPTS = 5,
+    BLOCK_VALID_SCRIPTS = 5,        //101
 
-    //! All validity bits.
+    //! All validity bits.      //注意上述五个等级，每次设置时，只会出现一个
     BLOCK_VALID_MASK = BLOCK_VALID_HEADER | BLOCK_VALID_TREE |
                        BLOCK_VALID_TRANSACTIONS | BLOCK_VALID_CHAIN |
-                       BLOCK_VALID_SCRIPTS,
+                       BLOCK_VALID_SCRIPTS,     // 111 = 7
 
     //!< full block available in blk*.dat
-    BLOCK_HAVE_DATA = 8,
-    //!< undo data available in rev*.dat
-    BLOCK_HAVE_UNDO = 16,
-    BLOCK_HAVE_MASK = BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO,
+    BLOCK_HAVE_DATA = 8,            // 1000
+    //!< undo data available in rev*.dat  在rev文件中， undo的数据可以在rev文件中访问
+    BLOCK_HAVE_UNDO = 16,           // 10000
+    BLOCK_HAVE_MASK = BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO,    //11000
 
-    //!< stage after last reached validness failed
-    BLOCK_FAILED_VALID = 32,
+    //!< stage after last reached validness failed； 后一个阶段到达有效性失败
+    BLOCK_FAILED_VALID = 32,        // 100000
     //!< descends from failed block
-    BLOCK_FAILED_CHILD = 64,
-    BLOCK_FAILED_MASK = BLOCK_FAILED_VALID | BLOCK_FAILED_CHILD,
+    BLOCK_FAILED_CHILD = 64,        // 1000000
+    BLOCK_FAILED_MASK = BLOCK_FAILED_VALID | BLOCK_FAILED_CHILD,    //1100000
 };
 
 /**
@@ -205,6 +207,8 @@ public:
     //! This value will be non-zero only if and only if transactions for this
     //! block and all its parents are available. Change to 64-bit type when
     //! necessary; won't happen before 2030
+    // 当且仅当该区块的交易，以及这些交易的所有的父交易都可以在链上访问时，该值才可以被设置为非0
+    //存储的是当前这条链，到这个区块时(包含该区块)所有的交易数量
     unsigned int nChainTx;
 
     //! Verification status of this block. See enum BlockStatus
@@ -218,10 +222,10 @@ public:
     uint32_t nNonce;
 
     //! (memory only) Sequential id assigned to distinguish order in which
-    //! blocks are received.
+    //! blocks are received.  nSequenceId: 被用来区分块的接收顺序
     int32_t nSequenceId;
 
-    //! (memory only) Maximum nTime in the chain upto and including this block.
+    //! (memory only) Maximum nTime in the chain upto and including this block. 在链上包含该块时的最大时间
     unsigned int nTimeMax;
 
     void SetNull() {
@@ -269,6 +273,7 @@ public:
 
     CDiskBlockPos GetUndoPos() const {
         CDiskBlockPos ret;
+        //如果块索引中有undo数据，就返回undo数据所在的文件位置
         if (nStatus & BLOCK_HAVE_UNDO) {
             ret.nFile = nFile;
             ret.nPos = nUndoPos;
@@ -319,7 +324,7 @@ public:
     }
 
     //! Check whether this block index entry is valid up to the passed validity
-    //! level.
+    //! level. 查看块的索引对于传入的验证等级是有效的。(nUpTo : 将要验证的等级)
     bool IsValid(enum BlockStatus nUpTo = BLOCK_VALID_TRANSACTIONS) const {
         // Only validity flags allowed.
         assert(!(nUpTo & ~BLOCK_VALID_MASK));
@@ -331,14 +336,15 @@ public:
 
     //! Raise the validity level of this block index entry.
     //! Returns true if the validity was changed.
+    // 提升块索引的验证等级。如果验证等级被成功修改，返回TRUE。
     bool RaiseValidity(enum BlockStatus nUpTo) {
-        // Only validity flags allowed.
+        // Only validity flags allowed. 只有指定的标识位才可以被设置
         assert(!(nUpTo & ~BLOCK_VALID_MASK));
         if (nStatus & BLOCK_FAILED_MASK) {
             return false;
         }
         if ((nStatus & BLOCK_VALID_MASK) < nUpTo) {
-            nStatus = (nStatus & ~BLOCK_VALID_MASK) | nUpTo;
+            nStatus = (nStatus & ~BLOCK_VALID_MASK) | nUpTo;        //给块的索引设置nUpTo状态
             return true;
         }
         return false;
@@ -358,6 +364,7 @@ arith_uint256 GetBlockProof(const CBlockIndex &block);
  * Return the time it would take to redo the work difference between from and
  * to, assuming the current hashrate corresponds to the difficulty at tip, in
  * seconds.
+ *
  */
 int64_t GetBlockProofEquivalentTime(const CBlockIndex &to,
                                     const CBlockIndex &from,

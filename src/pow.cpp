@@ -76,6 +76,7 @@ static uint32_t GetNextEDAWorkRequired(const CBlockIndex *pindexPrev,
     // chain do not get stuck in case we lose hashrate abruptly.
     arith_uint256 nPow;
     nPow.SetCompact(nBits);
+
     nPow += (nPow >> 2);
 
     // Make sure we do not go bellow allowed values.
@@ -98,6 +99,7 @@ uint32_t GetNextWorkRequired(const CBlockIndex *pindexPrev,
         return pindexPrev->nBits;
     }
 
+    //如果父区块的 中值时间 >= CashWork算法激活的时间
     if (pindexPrev->GetMedianTimePast() >=
         GetArg("-newdaaactivationtime", params.cashHardForkActivationTime)) {
         return GetNextCashWorkRequired(pindexPrev, pblock, params);
@@ -122,12 +124,14 @@ uint32_t CalculateNextWorkRequired(const CBlockIndex *pindexPrev,
     if (nActualTimespan > params.nPowTargetTimespan * 4) {
         nActualTimespan = params.nPowTargetTimespan * 4;
     }
+    std::cout << "nActualTimespan : " << nActualTimespan << std::endl;
 
     // Retarget
     const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
     arith_uint256 bnNew;
     bnNew.SetCompact(pindexPrev->nBits);
     bnNew *= nActualTimespan;
+    std::cout << "mul param : " << bnNew.GetCompact() << "\n";
     bnNew /= params.nPowTargetTimespan;
 
     if (bnNew > bnPowLimit) bnNew = bnPowLimit;
@@ -171,6 +175,8 @@ static arith_uint256 ComputeTarget(const CBlockIndex *pindexFirst,
      * we can deduce how much work we expect to be produced in the targeted time
      * between blocks.
      */
+std::cout << "pindexLast->height : " << pindexLast->nHeight << ", pindexLast->nChainWork : " << pindexLast->nChainWork.GetCompact() <<
+          ", pindexFirst->nHeight : " << pindexFirst->nHeight << ", pindexFirst->nChainWork : " << pindexFirst->nChainWork.GetCompact() << std::endl;
     arith_uint256 work = pindexLast->nChainWork - pindexFirst->nChainWork;
     work *= params.nPowTargetSpacing;
 
@@ -185,6 +191,7 @@ static arith_uint256 ComputeTarget(const CBlockIndex *pindexFirst,
     }
 
     work /= nActualTimespan;
+
 
     /**
      * We need to compute T = (2^256 / W) - 1 but 2^256 doesn't fit in 256 bits.
@@ -245,7 +252,7 @@ uint32_t GetNextCashWorkRequired(const CBlockIndex *pindexPrev,
 
     // Special difficulty rule for testnet:
     // If the new block's timestamp is more than 2* 10 minutes then allow
-    // mining of a min-difficulty block.
+    // mining of a min-difficulty block.  //
     if (params.fPowAllowMinDifficultyBlocks &&
         (pblock->GetBlockTime() >
          pindexPrev->GetBlockTime() + 2 * params.nPowTargetSpacing)) {

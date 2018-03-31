@@ -50,6 +50,7 @@ struct ChainTxData;
 struct PrecomputedTransactionData;
 struct LockPoints;
 
+///Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/validation.h
 #define MIN_TRANSACTION_SIZE                                                   \
     (::GetSerializeSize(CTransaction(), SER_NETWORK, PROTOCOL_VERSION))
 
@@ -81,7 +82,7 @@ static const unsigned int DEFAULT_DESCENDANT_SIZE_LIMIT = 101;
 static const unsigned int DEFAULT_MEMPOOL_EXPIRY = 336;
 /** The maximum size of a blk?????.dat file (since 0.8) */
 static const unsigned int MAX_BLOCKFILE_SIZE = 0x8000000; // 128 MiB
-/** The pre-allocation chunk size for blk?????.dat files (since 0.8) */
+/** The pre-allocation chunk size for blk?????.dat files (since 0.8)  预先分配的文件大小*/
 static const unsigned int BLOCKFILE_CHUNK_SIZE = 0x1000000; // 16 MiB
 /** The pre-allocation chunk size for rev?????.dat files (since 0.8) */
 static const unsigned int UNDOFILE_CHUNK_SIZE = 0x100000; // 1 MiB
@@ -175,7 +176,7 @@ extern CScript COINBASE_FLAGS;
 extern CCriticalSection cs_main;
 extern CTxMemPool mempool;
 typedef std::unordered_map<uint256, CBlockIndex *, BlockHasher> BlockMap;
-extern BlockMap mapBlockIndex;
+extern BlockMap mapBlockIndex;   //map : 一个块的hash和它的块索引(key,value 指的为同一个块)
 extern uint64_t nLastBlockTx;
 extern uint64_t nLastBlockSize;
 extern const std::string strMessageMagic;
@@ -202,7 +203,9 @@ extern Amount maxTxFee;
 extern int64_t nMaxTipAge;
 
 /** Block hash whose ancestors we will assume to have valid scripts without
- * checking them. */
+ * checking them.
+ * 假设该区块的祖先有有效的脚本，但是并没有验证它
+ * */
 extern uint256 hashAssumeValid;
 
 /** Best header we've seen so far (used for getheaders queries' starting
@@ -215,12 +218,14 @@ static const uint64_t nMinDiskSpace = 52428800;
 /** Pruning-related variables and constants */
 /** True if any block files have ever been pruned. */
 extern bool fHavePruned;
-/** True if we're running in -prune mode. */
+/** True if we're running in -prune mode. 如果我们以一个裁剪模式运行 */
 extern bool fPruneMode;
 /** Number of MiB of block files that we're trying to stay below. */
 extern uint64_t nPruneTarget;
 /** Block files containing a block-height within MIN_BLOCKS_TO_KEEP of
- * chainActive.Tip() will not be pruned. */
+ * chainActive.Tip() will not be pruned. 距离Tip端必须含有这些块的数据，即含有
+ * 这些块数据的文件是不可以修建的。
+ * */
 static const unsigned int MIN_BLOCKS_TO_KEEP = 288;
 
 static const signed int DEFAULT_CHECKBLOCKS = 6;
@@ -243,21 +248,29 @@ static const uint64_t MIN_DISK_SPACE_FOR_BLOCK_FILES = 550 * 1024 * 1024;
  * block is made active. Note that it does not, however, guarantee that the
  * specific block passed to it has been checked for validity!
  *
+ * 处理一个新块。只有当最有效的块被激活时，才返回TRUE。注意：刚方法不保证传递给他的特定块
+ * 是有效的。
+ *
  * If you want to *possibly* get feedback on whether pblock is valid, you must
  * install a CValidationInterface (see validationinterface.h) - this will have
  * its BlockChecked method called whenever *any* block completes validation.
  *
+ * 如果想知道一个块是否是有效的，并获取反馈，必须安装 CValidationInterface， 它含有BlockChecked 的调用方法。
+ *
+ *
  * Note that we guarantee that either the proof-of-work is valid on pblock, or
  * (and possibly also) BlockChecked will have been called.
+ * 注意：该方法保证块的工作量是有效的，因为 BlockChecked 将被调用.
+ *
  *
  * Call without cs_main held.
  *
  * @param[in]   pblock  The block we want to process.
  * @param[in]   fForceProcessing Process this block even if unrequested; used
- * for non-network block sources and whitelisted peers.
+ * for non-network block sources and whitelisted peers. 即使未请求也要处理这个块，用于处理不是来自网络的块或对等的白名单节点的块
  * @param[out]  fNewBlock A boolean which is set to indicate if the block was
- * first received via this call
- * @return True if state.IsValid()
+ * first received via this call。 标识这个块是否被第一次接受。
+ * @return True if state.IsValid()； 如果处理完后，状态为有效，则返回TRUE。
  */
 bool ProcessNewBlock(const Config &config,
                      const std::shared_ptr<const CBlock> pblock,
@@ -265,7 +278,7 @@ bool ProcessNewBlock(const Config &config,
 
 /**
  * Process incoming block headers.
- *
+ * 处理接收到的块头
  * Call without cs_main held.
  *
  * @param[in]  block The block headers themselves
@@ -274,6 +287,7 @@ bool ProcessNewBlock(const Config &config,
  * @param[in]  chainparams The params for the chain we want to connect to
  * @param[out] ppindex If set, the pointer will be set to point to the last new
  * block index object for the given headers
+ * 如果ppindex被设置，该指针被设置为指向最近的给定的块头的索引对象
  */
 bool ProcessNewBlockHeaders(const Config &config,
                             const std::vector<CBlockHeader> &block,
@@ -325,7 +339,9 @@ bool ActivateBestChain(
 Amount GetBlockSubsidy(int nHeight, const Consensus::Params &consensusParams);
 
 /** Guess verification progress (as a fraction between 0.0=genesis and
- * 1.0=current tip). */
+ * 1.0=current tip).
+ * 猜测当前的验证的进程； 从genesis -- current Tip (0.0-1.0)
+ * */
 double GuessVerificationProgress(const ChainTxData &data, CBlockIndex *pindex);
 
 /**
@@ -367,7 +383,7 @@ CBlockIndex *InsertBlockIndex(uint256 hash);
 /** Flush all state, indexes and buffers to disk. */
 void FlushStateToDisk();
 /** Prune block files and flush state to disk. */
-void PruneAndFlush();
+void  PruneAndFlush();
 /** Prune block files up to a given height */
 void PruneBlockFilesManual(int nPruneUpToHeight);
 
@@ -379,6 +395,7 @@ bool IsCashHFEnabled(const Config &config, const CBlockIndex *pindexPrev);
 
 /** (try to) add transaction to memory pool
  * plTxnReplaced will be appended to with all transactions replaced from mempool
+ * 将交易添加到mempool；plTxnReplaced(out): 所有从mempool中被替换的交易都将追加到该链表中
  * **/
 bool AcceptToMemoryPool(const Config &config, CTxMemPool &pool,
                         CValidationState &state, const CTransactionRef &tx,
@@ -447,7 +464,9 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
                  const PrecomputedTransactionData &txdata,
                  std::vector<CScriptCheck> *pvChecks = nullptr);
 
-/** Apply the effects of this transaction on the UTXO set represented by view */
+/** Apply the effects of this transaction on the UTXO set represented by view
+ * 将此交易刷新到view所表示的UTXO集合中；
+ * */
 void UpdateCoins(const CTransaction &tx, CCoinsViewCache &inputs, int nHeight);
 void UpdateCoins(const CTransaction &tx, CCoinsViewCache &inputs,
                  CTxUndo &txundo, int nHeight);
@@ -497,6 +516,11 @@ bool SequenceLocks(const CTransaction &tx, int flags,
  * should not be considered valid if CheckSequenceLocks returns false.
  *
  * See consensus/consensus.h for flag definitions.
+ *
+ * 检查这个交易在下个块中是否符合BIP68中的成熟交易；使用当前链顶端的数据调用SequenceLocks();
+ * 选择性的存储计算后的 该交易的时间和高度在 参数三中；并且计算时或跳过计算时需要块的哈希，并且在
+ * 评测中使用 传入的LockPoints数据。如果CheckSequenceLocks()返回false，则LockPoints 不应
+ * 该被视为有效的。
  */
 bool CheckSequenceLocks(const CTransaction &tx, int flags,
                         LockPoints *lp = nullptr,
@@ -505,14 +529,16 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags,
 /**
  * Closure representing one script verification.
  * Note that this stores references to the spending transaction.
+ * 闭合实现一个脚本的验证。
+ * 注意：这里的存储引用了一个正在花费的交易。该交易需要被验证。
  */
 class CScriptCheck {
 private:
-    CScript scriptPubKey;
-    Amount amount;
-    const CTransaction *ptxTo;
-    unsigned int nIn;
-    uint32_t nFlags;
+    CScript scriptPubKey;       //锁定脚本(即该验证交易的某个引用输出对应的锁定脚本)
+    Amount amount;              //上述锁定脚本对应 的金额(即花费的UTXO的金额)
+    const CTransaction *ptxTo;  //正在花费的交易，即要检查的交易
+    unsigned int nIn;           //要检查该交易的第几个输入；
+    uint32_t nFlags;            //检查标识
     bool cacheStore;
     ScriptError error;
     PrecomputedTransactionData txdata;
@@ -532,6 +558,7 @@ public:
 
     bool operator()();
 
+    // 采用这种方式对新对象进行赋值，避免拷贝赋值，节省时间。
     void swap(CScriptCheck &check) {
         scriptPubKey.swap(check.scriptPubKey);
         std::swap(ptxTo, check.ptxTo);
@@ -546,7 +573,7 @@ public:
     ScriptError GetScriptError() const { return error; }
 };
 
-/** Functions for disk access for blocks */
+/** Functions for disk access for blocks  区块的磁盘访问功能，写块至磁盘 */
 bool WriteBlockToDisk(const CBlock &block, CDiskBlockPos &pos,
                       const CMessageHeader::MessageStartChars &messageStart);
 bool ReadBlockFromDisk(CBlock &block, const CDiskBlockPos &pos,
@@ -607,7 +634,9 @@ bool TestBlockValidity(const Config &config, CValidationState &state,
                        bool fCheckMerkleRoot = true);
 
 /** When there are blocks in the active chain with missing data, rewind the
- * chainstate and remove them from the block index */
+ * chainstate and remove them from the block index
+ * 当在激活链上的块有丢失数据时，倒推链的状态，并将它从块的索引中移除。
+ * */
 bool RewindBlockIndex(const Config &config, const CChainParams &params);
 
 /** RAII wrapper for VerifyDB: Verify consistency of the block and coin
@@ -624,15 +653,22 @@ public:
 CBlockIndex *FindForkInGlobalIndex(const CChain &chain,
                                    const CBlockLocator &locator);
 
-/** Mark a block as precious and reorganize. */
+/** Mark a block as precious and reorganize.
+ * 标记一个块 重要，并重新重组
+ * pindex(in):该块的索引
+ * */
 bool PreciousBlock(const Config &config, CValidationState &state,
                    CBlockIndex *pindex);
 
-/** Mark a block as invalid. */
+/** Mark a block as invalid.
+ * 表示一个块为无效
+ * */
 bool InvalidateBlock(const Config &config, CValidationState &state,
                      CBlockIndex *pindex);
 
-/** Remove invalidity status from a block and its descendants. */
+/** Remove invalidity status from a block and its descendants.
+ * 移除该块和它的后代区块的 无效状态
+ * */
 bool ResetBlockFailureFlags(CBlockIndex *pindex);
 
 /** The currently-connected chain of blocks (protected by cs_main). */
@@ -643,6 +679,7 @@ extern CChain chainActive;
 extern CCoinsViewCache *pcoinsTip;
 
 /** Global variable that points to the active block tree (protected by cs_main)
+ * 指向当前的 激活链
  */
 extern CBlockTreeDB *pblocktree;
 
@@ -654,6 +691,7 @@ extern CBlockTreeDB *pblocktree;
  */
 int GetSpendHeight(const CCoinsViewCache &inputs);
 
+//全局状态，每隔2016个块，缓存本轮第一个块的部署状态
 extern VersionBitsCache versionbitscache;
 
 /**
@@ -678,7 +716,7 @@ static const unsigned int REJECT_CONFLICT = 0x102;
 /** Get block file info entry for one block file */
 CBlockFileInfo *GetBlockFileInfo(size_t n);
 
-/** Dump the mempool to disk. */
+/** ç the mempool to disk. */
 void DumpMempool();
 
 /** Load the mempool from disk. */

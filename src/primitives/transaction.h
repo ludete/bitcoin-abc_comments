@@ -77,11 +77,16 @@ public:
 
     /* If CTxIn::nSequence encodes a relative lock-time and this flag
      * is set, the relative lock-time has units of 512 seconds,
-     * otherwise it specifies blocks with a granularity of 1. */
+     * otherwise it specifies blocks with a granularity of 1.
+     * 如果sequence字段标识 相对锁定时间，并且这份flag被设置，则相对时间是以512s为一个
+     * 锁定单元，否则，它标识一个粒度为1 的块。
+     * */
     static const uint32_t SEQUENCE_LOCKTIME_TYPE_FLAG = (1 << 22);
 
     /* If CTxIn::nSequence encodes a relative lock-time, this mask is
-     * applied to extract that lock-time from the sequence field. */
+     * applied to extract that lock-time from the sequence field.
+     * 如果sequence字段标识为相对的锁定时间，用这个掩码去获取 该交易输入的锁定时间
+     * */
     static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
 
     /* In order to use the same number of bits to encode roughly the
@@ -90,7 +95,11 @@ public:
      * for time-based relative lock-time is fixed at 512 seconds.
      * Converting from CTxIn::nSequence to seconds is performed by
      * multiplying by 512 = 2^9, or equivalently shifting up by
-     * 9 bits. */
+     * 9 bits.
+     * 为了使用相同的bit位去编码大致相同的挂钟时间，并且因为出块的时间被限制在大概10分钟600s，
+     * 所以基于相对时间锁的最低粒度被限制在512s. 所以从 CTxIn::nSequence 转换到 秒，是通过
+     * 乘以512(即2**9)；或等价于将该值左移9位。
+     * */
     static const int SEQUENCE_LOCKTIME_GRANULARITY = 9;
 
     CTxIn() { nSequence = SEQUENCE_FINAL; }
@@ -122,6 +131,7 @@ public:
 /**
  * An output of a transaction.  It contains the public key that the next input
  * must be able to sign with to claim it.
+ * 一个交易的输出，它包含一个接下来的输入必须使用它对应的私钥签名并声明它。
  */
 class CTxOut {
 public:
@@ -278,7 +288,7 @@ public:
                            unsigned int nTxSize = 0) const;
 
     // Compute modified tx size for priority calculation (optionally given tx
-    // size)
+    // size) 当计算交易优先级时，计算修改交易的大小
     unsigned int CalculateModifiedSize(unsigned int nTxSize = 0) const;
 
     /**

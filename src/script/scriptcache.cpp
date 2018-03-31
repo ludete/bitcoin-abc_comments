@@ -14,6 +14,8 @@
 #include "validation.h"
 
 static CuckooCache::cache<uint256, SignatureCacheHasher> scriptExecutionCache;
+
+//全局的静态变量；每次客户端启动，都算一次，然后对本次启动所有检查过的交易做标记。
 static uint256 scriptExecutionCacheNonce(GetRandHash());
 
 void InitScriptExecutionCache() {
@@ -30,10 +32,12 @@ void InitScriptExecutionCache() {
               (nElems * sizeof(uint256)) >> 20, nMaxCacheSize >> 20, nElems);
 }
 
+//获取交易哈希的缓存key，这样当第一次检查完交易后，就将该交易写入缓存中，当下次再收到该交易时，就不再检查该交易了。
 uint256 GetScriptCacheKey(const CTransaction &tx, uint32_t flags) {
     uint256 key;
     // We only use the first 19 bytes of nonce to avoid a second SHA round -
     // giving us 19 + 32 + 4 = 55 bytes (+ 8 + 1 = 64)
+    // 只使用 nonce的前19个字节
     static_assert(55 - sizeof(flags) - 32 >= 128 / 8,
                   "Want at least 128 bits of nonce for script execution cache");
     CSHA256()
@@ -41,6 +45,7 @@ uint256 GetScriptCacheKey(const CTransaction &tx, uint32_t flags) {
         .Write(tx.GetHash().begin(), 32)
         .Write((uint8_t *)&flags, sizeof(flags))
         .Finalize(key.begin());
+    // 一次写入 本次开机随机哈希的前19个字节， 该交易的哈希，以及检测该交易时的标识，用上述这些数据来计算该交易的缓存哈希。
 
     return key;
 }

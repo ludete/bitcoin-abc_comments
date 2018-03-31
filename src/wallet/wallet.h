@@ -161,7 +161,9 @@ struct COutputEntry {
     int vout;
 };
 
-/** A transaction with a merkle branch linking it to the block chain. */
+/** A transaction with a merkle branch linking it to the block chain.
+ * 带merkle分支的交易添加到块链上
+ * */
 class CMerkleTx {
 private:
     /** Constant used in hashBlock to indicate tx has been abandoned */
@@ -236,6 +238,7 @@ public:
     /**
      * Pass this transaction to the mempool. Fails if absolute fee exceeds
      * absurd fee.
+     * 将钱包发出的交易先添加到交易池，可能失败(原因是：交易费过高，超出限制)
      */
     bool AcceptToMemoryPool(const CAmount &nAbsurdFee, CValidationState &state);
     bool hashUnset() const {
@@ -252,6 +255,7 @@ public:
  * A transaction with a bunch of additional info that only the owner cares
  * about. It includes any unrecorded transactions needed to link it back to the
  * block chain.
+ * 该交易携带一些只有业主关注的额外信息。包含将其链接回块链的未记录信息。
  */
 class CWalletTx : public CMerkleTx {
 private:
@@ -552,6 +556,7 @@ private:
  * A CWallet is an extension of a keystore, which also maintains a set of
  * transactions and balances, and provides the ability to create new
  * transactions.
+ * 钱包类，存储了一个秘钥库，并且维护这个一个交易和余额的集合，并且提供创建新交易的能力
  */
 class CWallet : public CCryptoKeyStore, public CValidationInterface {
 private:

@@ -12,7 +12,7 @@
 class Config;
 
 /** Default for -maxorphantx, maximum number of orphan transactions kept in
- * memory */
+ * memory  交易池中最大的孤儿交易的数量  */
 static const unsigned int DEFAULT_MAX_ORPHAN_TRANSACTIONS = 100;
 /** Expiration time for orphan transactions in seconds */
 static const int64_t ORPHAN_TX_EXPIRE_TIME = 20 * 60;

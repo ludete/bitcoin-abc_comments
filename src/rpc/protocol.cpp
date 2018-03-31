@@ -80,6 +80,7 @@ bool GenerateAuthCookie(std::string *cookie_out) {
 
     /** the umask determines what permissions are used to create this file -
      * these are set to 077 in init.cpp unless overridden with -sysperms.
+     * 掩码定义了创建文件时使用的权限-在init.cpp里定义了为077，除非使用 -sysperms重新指定；
      */
     std::ofstream file;
     boost::filesystem::path filepath = GetAuthCookieFile();

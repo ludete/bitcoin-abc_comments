@@ -1,6 +1,7 @@
 // Copyright (c) 2014-2016 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+///Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/timedata.cpp
 
 #if defined(HAVE_CONFIG_H)
 #include "config/bitcoin-config.h"
@@ -21,10 +22,10 @@ static int64_t nTimeOffset = 0;
 /**
  * "Never go to sea with two chronometers; take one or three."
  * Our three time sources are:
- *  - System clock
- *  - Median of other nodes clocks
+ *  - System clock; 系统时间
+ *  - Median of other nodes clocks; 其他节点的中值时间
  *  - The user (asking the user to fix the system clock if the first two
- * disagree)
+ * disagree); 用户时间
  */
 int64_t GetTimeOffset() {
     LOCK(cs_nTimeOffset);

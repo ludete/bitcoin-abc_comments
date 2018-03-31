@@ -1069,6 +1069,7 @@ static UniValue signrawtransaction(const Config &config,
     return result;
 }
 
+// RPC 命令进行发送交易；
 static UniValue sendrawtransaction(const Config &config,
                                    const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() < 1 ||
@@ -1129,6 +1130,7 @@ static UniValue sendrawtransaction(const Config &config,
         // Push to local node and sync with wallets.
         CValidationState state;
         bool fMissingInputs;
+        // 添加交易到交易池
         if (!AcceptToMemoryPool(config, mempool, state, std::move(tx),
                                 fLimitFree, &fMissingInputs, nullptr, false,
                                 nMaxRawTxFee)) {

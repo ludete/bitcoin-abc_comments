@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+//网络类型
 enum Network {
     NET_UNROUTABLE = 0,
     NET_IPV4,
@@ -145,7 +146,9 @@ public:
     }
 };
 
-/** A combination of a network address (CNetAddr) and a (TCP) port */
+/** A combination of a network address (CNetAddr) and a (TCP) port
+ * 网络地址和端口号的组合
+ * */
 class CService : public CNetAddr {
 protected:
     // host order

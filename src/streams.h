@@ -525,6 +525,7 @@ public:
  *
  * Will automatically close the file when it goes out of scope if not null. If
  * you need to close the file early, use file.fclose() instead of fclose(file).
+ * 在超出界限时，将自动的关闭文件描述。
  */
 class CBufferedFile {
 private:
@@ -551,18 +552,19 @@ private:
 protected:
     // read data from the source to fill the buffer
     bool Fill() {
-        unsigned int pos = nSrcPos % vchBuf.size();
-        unsigned int readNow = vchBuf.size() - pos;
-        unsigned int nAvail = vchBuf.size() - (nSrcPos - nReadPos) - nRewind;
+        unsigned int pos = nSrcPos % vchBuf.size();     //获取读取的起始位置；buf 重复使用
+        unsigned int readNow = vchBuf.size() - pos;     //获取buf中其余的空闲位置
+        unsigned int nAvail = vchBuf.size() - (nSrcPos - nReadPos) - nRewind;   //可以使用的buf空间
         if (nAvail < readNow) readNow = nAvail;
         if (readNow == 0) return false;
+        // 从底层文件流中读取数据
         size_t read = fread((void *)&vchBuf[pos], 1, readNow, src);
         if (read == 0) {
             throw std::ios_base::failure(
                 feof(src) ? "CBufferedFile::Fill: end of file"
                           : "CBufferedFile::Fill: fread failed");
         } else {
-            nSrcPos += read;
+            nSrcPos += read;        //记录总共读取的字节数
             return true;
         }
     }
@@ -650,6 +652,7 @@ public:
     }
 
     // search for a given byte in the stream, and remain positioned on it
+    // 当无数据时，限度去数据
     void FindByte(char ch) {
         while (true) {
             if (nReadPos == nSrcPos) Fill();

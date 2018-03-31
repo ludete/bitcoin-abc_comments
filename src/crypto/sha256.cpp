@@ -41,7 +41,7 @@ namespace sha256 {
         h = t1 + t2;
     }
 
-    /** Initialize SHA-256 state. */
+    /** Initialize SHA-256 state. 初始化s. */
     inline void Initialize(uint32_t *s) {
         s[0] = 0x6a09e667ul;
         s[1] = 0xbb67ae85ul;
@@ -200,6 +200,7 @@ CSHA256 &CSHA256::Write(const uint8_t *data, size_t len) {
     size_t bufsize = bytes % 64;
     if (bufsize && bufsize + len >= 64) {
         // Fill the buffer, and process it.
+        // 将data中的数据写入buf的指定位置
         memcpy(buf + bufsize, data, 64 - bufsize);
         bytes += 64 - bufsize;
         data += 64 - bufsize;
@@ -223,9 +224,11 @@ CSHA256 &CSHA256::Write(const uint8_t *data, size_t len) {
 void CSHA256::Finalize(uint8_t hash[OUTPUT_SIZE]) {
     static const uint8_t pad[64] = {0x80};
     uint8_t sizedesc[8];
+    //将bytes左移三位，然后写入 sizedesc 中。
     WriteBE64(sizedesc, bytes << 3);
     Write(pad, 1 + ((119 - (bytes % 64)) % 64));
     Write(sizedesc, 8);
+    // 将s中的每个元素，序列化写入hash的指定内存位置。
     WriteBE32(hash, s[0]);
     WriteBE32(hash + 4, s[1]);
     WriteBE32(hash + 8, s[2]);
@@ -236,6 +239,7 @@ void CSHA256::Finalize(uint8_t hash[OUTPUT_SIZE]) {
     WriteBE32(hash + 28, s[7]);
 }
 
+//重新设置 CSHA256 的内部数据
 CSHA256 &CSHA256::Reset() {
     bytes = 0;
     sha256::Initialize(s);

@@ -34,6 +34,7 @@ inline double AllowFreeThreshold() {
     return COIN.GetSatoshis() * 144 / 250;
 }
 
+//允许免费中继该交易
 inline bool AllowFree(double dPriority) {
     // Large (in bytes) low-priority (new, small-coin) transactions need a fee.
     return dPriority > AllowFreeThreshold();
@@ -49,11 +50,13 @@ struct LockPoints {
     // Will be set to the blockchain height and median time past values that
     // would be necessary to satisfy all relative locktime constraints (BIP68)
     // of this tx given our view of block chain history
+    // 设置块链的高度和中值时间，用来符合相对锁定时间限制(BIP68);
     int height;
     int64_t time;
     // As long as the current chain descends from the highest height block
     // containing one of the inputs used in the calculation, then the cached
     // values are still valid even after a reorg.
+    // 只要当前的链从这个块高度下降，该高度的块的一个交易 那么缓存的值在块链重组后仍然有效。
     CBlockIndex *maxInputBlock;
 
     LockPoints() : height(0), time(0), maxInputBlock(nullptr) {}
@@ -81,37 +84,39 @@ class CTxMemPool;
 class CTxMemPoolEntry {
 private:
     CTransactionRef tx;
-    //!< Cached to avoid expensive parent-transaction lookups
+    //!< Cached to avoid expensive parent-transaction lookups; 缓存交易费，避免进行昂贵的查询。
     Amount nFee;
-    //!< ... and avoid recomputing tx size
+    //!< ... and avoid recomputing tx size； 缓存交易大小，避免重复计算；
     size_t nTxSize;
-    //!< ... and modified size for priority
+    //!< ... and modified size for priority；计算优先级时，默认交易的每个签名最大有110字节；用一个交易的序列化字节-所有签名大小 = nModSize
     size_t nModSize;
-    //!< ... and total memory usage
+    //!< ... and total memory usage； 该结构总的内存使用量
     size_t nUsageSize;
-    //!< Local time when entering the mempool
+    //!< Local time when entering the mempool； 该交易进入mempool时的本地时间
     int64_t nTime;
-    //!< Priority when entering the mempool
+    //!< Priority when entering the mempool；  该交易进入mempool时的优先级
     double entryPriority;
-    //!< Chain height when entering the mempool
+    //!< Chain height when entering the mempool； 交易进入mempool时，主链的高度
     unsigned int entryHeight;
-    //!< Sum of all txin values that are already in blockchain
+    //!< Sum of all txin values that are already in blockchain； 所有交易输入的总和
     Amount inChainInputValue;
-    //!< keep track of transactions that spend a coinbase
+    //!< keep track of transactions that spend a coinbase； 标识该交易是否花费了一个coinbase交易，如果花费了，此处为true.
     bool spendsCoinbase;
-    //!< Total sigop plus P2SH sigops count
+    //!< Total sigop plus P2SH sigops count； 所有的操作码加上P2SH的操作码
     int64_t sigOpCount;
     //!< Used for determining the priority of the transaction for mining in a
-    //! block
+    //! block  用来决定交易在挖矿时的优先级
     Amount feeDelta;
-    //!< Track the height and time at which tx was final
+    //!< Track the height and time at which tx was final；  跟踪每个交易在哪个高度，哪个时间，将为成熟交易，可以打包。
     LockPoints lockPoints;
 
     // Information about descendants of this transaction that are in the
     // mempool; if we remove this transaction we must remove all of these
     // descendants as well.  if nCountWithDescendants is 0, treat this entry as
     // dirty, and nSizeWithDescendants and nModFeesWithDescendants will not be
-    // correct.
+    // correct.  在交易池中该交易的后代交易数量；如果移除了该交易，那么也必须移除它所有的后代交易。
+    // 当 nCountWithDescendants = 0时，这个字段是不正确的，并且nModFeesWithDescendants和nSizeWithDescendants也不正确。
+    // 因为每个交易的该值默认从1开始。
     //!< number of descendant transactions
     uint64_t nCountWithDescendants;
     //!< ... and size
@@ -119,7 +124,7 @@ private:
     //!< ... and total fees (all including us)
     Amount nModFeesWithDescendants;
 
-    // Analogous statistics for ancestor transactions
+    // Analogous statistics for ancestor transactions  类似的该交易的祖先交易的信息。
     uint64_t nCountWithAncestors;
     uint64_t nSizeWithAncestors;
     Amount nModFeesWithAncestors;
@@ -336,15 +341,16 @@ class CBlockPolicyEstimator;
 
 /**
  * Information about a mempool transaction.
+ * 交易池中条目的信息
  */
 struct TxMempoolInfo {
-    /** The transaction itself */
+    /** The transaction itself 交易*/
     CTransactionRef tx;
 
-    /** Time the transaction entered the mempool. */
+    /** Time the transaction entered the mempool. 交易进入交易池的时间*/
     int64_t nTime;
 
-    /** Feerate of the transaction. */
+    /** Feerate of the transaction. 该交易费率*/
     CFeeRate feeRate;
 
     /** The fee delta. */
@@ -468,7 +474,7 @@ public:
 class CTxMemPool {
 private:
     //!< Value n means that n times in 2^32 we check.
-    uint32_t nCheckFrequency;
+    uint32_t nCheckFrequency;       //设置完整性检查
     unsigned int nTransactionsUpdated;
     CBlockPolicyEstimator *minerPolicyEstimator;
 
@@ -478,15 +484,15 @@ private:
     //! themselves)
     uint64_t cachedInnerUsage;
 
-    mutable int64_t lastRollingFeeUpdate;
+    mutable int64_t lastRollingFeeUpdate;       //最后一次更新矿池手续费的时间
     mutable bool blockSinceLastRollingFeeBump;
-    //!< minimum fee to get into the pool, decreases exponentially
+    //!< minimum fee to get into the pool, decreases exponentially 进入交易池的最低手续费，成倍降低
     mutable double rollingMinimumFeeRate;
 
     void trackPackageRemoved(const CFeeRate &rate);
 
 public:
-    // public only for testing
+    // public only for testing； 12小时
     static const int ROLLING_FEE_HALFLIFE = 60 * 60 * 12;
 
     typedef boost::multi_index_container<
@@ -617,6 +623,9 @@ public:
      * this transaction is being removed for being in a block. Set
      * updateDescendants to true when removing a tx that was in a block, so that
      * any in-mempool descendants have their ancestor state updated.
+     * 移除交易池中的一个交易集合。如果一个交易在这个删除集合中，那么这个交易在交易池中的所有的后代
+     * 交易都必须在这个集合中。除非因为接受了一个区块而需要删除区块中的交易，所以所有交易池中以
+     * 这个交易作为祖先交易的后代交易都必须更新他们的祖先交易的状态。
      */
     void
     RemoveStaged(setEntries &stage, bool updateDescendants,
@@ -665,6 +674,7 @@ public:
      * used to bound the time it takes the fee rate to go back down all the way
      * to 0. When the feerate would otherwise be half of this, it is set to 0
      * instead.
+     *
      */
     CFeeRate GetMinFee(size_t sizelimit) const;
 
@@ -673,16 +683,22 @@ public:
      * sizelimit. pvNoSpendsRemaining, if set, will be populated with the list
      * of outpoints which are not in mempool which no longer have any spends in
      * this mempool.
+     * 从交易池中移除交易，直到交易池的内存小号达到指定大小。如果参二不为空，填充不再mempool中的outPoint
+     * 数据，这些outpoint将不再花费mempool中的任何交易
      */
     void TrimToSize(size_t sizelimit,
                     std::vector<COutPoint> *pvNoSpendsRemaining = nullptr);
 
     /** Expire all transaction (and their dependencies) in the mempool older
-     * than time. Return the number of removed transactions. */
+     * than time. Return the number of removed transactions.
+     * 删除交易池中指定时间之前的交易，以及它所有的父交易，并返回删除的总交易个数。
+     * */
     int Expire(int64_t time);
 
     /** Returns false if the transaction is in the mempool and not within the
-     * chain limit specified. */
+     * chain limit specified.
+     * 如果交易在交易池中，但是不在当前链的限制之内，返回false
+     * */
     bool TransactionWithinChainLimit(const uint256 &txid,
                                      size_t chainLimit) const;
 
@@ -739,9 +755,9 @@ public:
 
     size_t DynamicMemoryUsage() const;
 
-    boost::signals2::signal<void(CTransactionRef)> NotifyEntryAdded;
+    boost::signals2::signal<void(CTransactionRef)> NotifyEntryAdded;   //添加交易的信号
     boost::signals2::signal<void(CTransactionRef, MemPoolRemovalReason)>
-        NotifyEntryRemoved;
+        NotifyEntryRemoved;     //移除交易的信号； 参一：操作的交易； 参二：操作的原因
 
 private:
     /**
@@ -768,6 +784,8 @@ private:
      * For each transaction being removed, update ancestors and any direct
      * children. If updateDescendants is true, then also update in-mempool
      * descendants' ancestor state.
+     * 对于每个移除的交易，更新它的祖先，和所有的直接的子交易。如果updateDescendants 为true，
+     * 则更新交易池中 它的所有的后代交易。
      */
     void UpdateForRemoveFromMempool(const setEntries &entriesToRemove,
                                     bool updateDescendants);

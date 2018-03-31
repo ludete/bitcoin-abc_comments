@@ -39,6 +39,10 @@ extern unsigned nMaxDatacarrierBytes;
  *
  * Failing one of these tests may trigger a DoS ban - see CheckInputs() for
  * details.
+ * 强制性脚本验证标识，所有的新区块必须使用该标志验证 为有效。(因为以前有的区块并没有全部采用该验证标识)；
+ * 当前主要是P2SH标识(该标识是后来添加的)；但是在未来可能还有其他的验证标志被添加，例如软分叉强制执行严格
+ * 的DER编码。
+ * 如果这些测试中的任何一个失败，都可能触发DOS禁令。细节看CheckInputs
  */
 static const unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS =
     SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC | SCRIPT_ENABLE_SIGHASH_FORKID;

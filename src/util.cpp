@@ -341,11 +341,13 @@ static void InterpretNegativeSetting(std::string &strKey,
     }
 }
 
+// 解析命令行参数；将解析后的数据放入全局状态中；方便查询。
 void ParseParameters(int argc, const char *const argv[]) {
     LOCK(cs_args);
     mapArgs.clear();
     _mapMultiArgs.clear();
 
+    // 遍历命令行参数
     for (int i = 1; i < argc; i++) {
         std::string str(argv[i]);
         std::string strValue;
@@ -467,6 +469,7 @@ void PrintExceptionContinue(const std::exception *pex, const char *pszThread) {
     fprintf(stderr, "\n\n************************\n%s\n", message.c_str());
 }
 
+// 获取存储数据的目录
 boost::filesystem::path GetDefaultDataDir() {
     namespace fs = boost::filesystem;
 // Windows < Vista: C:\Documents and Settings\Username\Application Data\Bitcoin
@@ -519,6 +522,7 @@ const boost::filesystem::path &GetDataDir(bool fNetSpecific) {
     }
     if (fNetSpecific) path /= BaseParams().DataDir();
 
+    //创建目录
     fs::create_directories(path);
 
     return path;
@@ -620,7 +624,7 @@ void FileCommit(FILE *file) {
     FlushFileBuffers(hFile);
 #else
 #if defined(__linux__) || defined(__NetBSD__)
-    fdatasync(fileno(file));
+    fdatasync(fileno(file));        //fileno 将FILE*指针，转换为fd文件描述符
 #elif defined(__APPLE__) && defined(F_FULLFSYNC)
     fcntl(fileno(file), F_FULLFSYNC, 0);
 #else
@@ -665,7 +669,9 @@ int RaiseFileDescriptorLimit(int nMinFD) {
 /**
  * This function tries to make a particular range of a file allocated
  * (corresponding to disk space) it is advisory, and the range specified in the
- * arguments will never contain live data.
+ * arguments will never contain live data. 在指定文件范围内的，不不含相对的数据，只是
+ * 用来测试是否可以写入这么多的内容;防止磁盘容量不够。
+ * 参一：文件指针；参二：文件将要偏移的位置；参三：文件还需要写入的数据大小
  */
 void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length) {
 #if defined(WIN32)
@@ -698,7 +704,9 @@ void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length) {
     // Fallback version
     // TODO: just write one byte per block
     static const char buf[65536] = {};
+    //1. 移动文件描述符
     fseek(file, offset, SEEK_SET);
+    //2. 持续向文件中写入空数据；查看是否可以写入这么多内容。
     while (length > 0) {
         unsigned int now = 65536;
         if (length < now) now = length;

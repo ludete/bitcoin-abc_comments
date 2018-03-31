@@ -27,6 +27,7 @@ public:
 
     void Finalize(uint8_t hash[OUTPUT_SIZE]) {
         uint8_t buf[CSHA256::OUTPUT_SIZE];
+        // 将
         sha.Finalize(buf);
         sha.Reset().Write(buf, CSHA256::OUTPUT_SIZE).Finalize(hash);
     }
@@ -132,7 +133,9 @@ inline uint160 Hash160(const prevector<N, uint8_t> &vch) {
     return Hash160(vch.begin(), vch.end());
 }
 
-/** A writer stream (for serialization) that computes a 256-bit hash. */
+/** A writer stream (for serialization) that computes a 256-bit hash.
+ * 用于计算sha256的写入流(用于序列化)
+ * */
 class CHashWriter {
 private:
     CHash256 ctx;
@@ -151,13 +154,14 @@ public:
         ctx.Write((const uint8_t *)pch, size);
     }
 
-    // invalidates the object
+    // invalidates the object 使这个对象无效
     uint256 GetHash() {
         uint256 result;
         ctx.Finalize((uint8_t *)&result);
         return result;
     }
 
+    // 将参数写入底层数据流。
     template <typename T> CHashWriter &operator<<(const T &obj) {
         // Serialize to this stream
         ::Serialize(*this, obj);
@@ -167,6 +171,7 @@ public:
 
 /**
  * Reads data from an underlying stream, while hashing the read data.
+ * 从底层数据流读取数据，并对读取的数据做哈希。
  */
 template <typename Source> class CHashVerifier : public CHashWriter {
 private:
@@ -182,6 +187,7 @@ public:
         this->write(pch, nSize);
     }
 
+    //忽略字节的多少数据
     void ignore(size_t nSize) {
         char data[1024];
         while (nSize > 0) {
@@ -190,7 +196,7 @@ public:
             nSize -= now;
         }
     }
-
+    //反序列化数据
     template <typename T> CHashVerifier<Source> &operator>>(T &obj) {
         // Unserialize from this stream
         ::Unserialize(*this, obj);

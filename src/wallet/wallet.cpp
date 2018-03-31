@@ -3028,6 +3028,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient> &vecSend,
 
 /**
  * Call after CreateTransaction unless you want to abort
+ * 在创建交易后调用，除非想退出
  */
 bool CWallet::CommitTransaction(CWalletTx &wtxNew, CReserveKey &reservekey,
                                 CConnman *connman, CValidationState &state) {

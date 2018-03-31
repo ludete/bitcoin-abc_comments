@@ -12,8 +12,8 @@
 #include "tinyformat.h"
 #include "utilstrencodings.h"
 
-static const uint8_t pchIPv4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
-static const uint8_t pchOnionCat[] = {0xFD, 0x87, 0xD8, 0x7E, 0xEB, 0x43};
+static const uint8_t pchIPv4[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};  //IPV4
+static const uint8_t pchOnionCat[] = {0xFD, 0x87, 0xD8, 0x7E, 0xEB, 0x43};      //tor 网络
 
 void CNetAddr::Init() {
     memset(ip, 0, sizeof(ip));
@@ -69,6 +69,7 @@ unsigned int CNetAddr::GetByte(int n) const {
     return ip[15 - n];
 }
 
+//是否为IPV4地址
 bool CNetAddr::IsIPv4() const {
     return (memcmp(ip, pchIPv4, sizeof(pchIPv4)) == 0);
 }
@@ -77,6 +78,7 @@ bool CNetAddr::IsIPv6() const {
     return (!IsIPv4() && !IsTor());
 }
 
+//其他的网络地址分配协议
 bool CNetAddr::IsRFC1918() const {
     return IsIPv4() &&
            (GetByte(3) == 10 || (GetByte(3) == 192 && GetByte(2) == 168) ||
@@ -144,10 +146,12 @@ bool CNetAddr::IsRFC4843() const {
             (GetByte(12) & 0xF0) == 0x10);
 }
 
+//是否为 tor 网络
 bool CNetAddr::IsTor() const {
     return (memcmp(ip, pchOnionCat, sizeof(pchOnionCat)) == 0);
 }
 
+//是否为本地地址
 bool CNetAddr::IsLocal() const {
     // IPv4 loopback
     if (IsIPv4() && (GetByte(3) == 127 || GetByte(3) == 0)) return true;
@@ -160,10 +164,12 @@ bool CNetAddr::IsLocal() const {
     return false;
 }
 
+//是组播
 bool CNetAddr::IsMulticast() const {
     return (IsIPv4() && (GetByte(3) & 0xF0) == 0xE0) || (GetByte(15) == 0xFF);
 }
 
+//IP地址是否是有效的
 bool CNetAddr::IsValid() const {
     // Cleanup 3-byte shifted addresses caused by garbage in size field of addr
     // messages from versions before 0.2.9 checksum.
@@ -177,7 +183,7 @@ bool CNetAddr::IsValid() const {
     uint8_t ipNone6[16] = {};
     if (memcmp(ip, ipNone6, 16) == 0) return false;
 
-    // documentation IPv6 address
+    // documentation IPv6 address;
     if (IsRFC3849()) return false;
 
     if (IsIPv4()) {
@@ -193,6 +199,7 @@ bool CNetAddr::IsValid() const {
     return true;
 }
 
+//是可路由的
 bool CNetAddr::IsRoutable() const {
     return IsValid() &&
            !(IsRFC1918() || IsRFC2544() || IsRFC3927() || IsRFC4862() ||
@@ -200,6 +207,7 @@ bool CNetAddr::IsRoutable() const {
              IsRFC4843() || IsLocal());
 }
 
+//获取网络类型
 enum Network CNetAddr::GetNetwork() const {
     if (!IsRoutable()) return NET_UNROUTABLE;
 
@@ -210,6 +218,7 @@ enum Network CNetAddr::GetNetwork() const {
     return NET_IPV6;
 }
 
+//
 std::string CNetAddr::ToStringIP() const {
     if (IsTor()) return EncodeBase32(&ip[6], 10) + ".onion";
     CService serv(*this, 0);
@@ -336,7 +345,9 @@ static int GetExtNetwork(const CNetAddr *addr) {
     return addr->GetNetwork();
 }
 
-/** Calculates a metric for how reachable (*this) is from a given partner */
+/** Calculates a metric for how reachable (*this) is from a given partner
+ * 计算一个
+ * */
 int CNetAddr::GetReachabilityFrom(const CNetAddr *paddrPartner) const {
     enum Reachability {
         REACH_UNREACHABLE,
@@ -472,6 +483,7 @@ bool operator<(const CService &a, const CService &b) {
            ((CNetAddr)a == (CNetAddr)b && a.port < b.port);
 }
 
+// 创建socket
 bool CService::GetSockAddr(struct sockaddr *paddr, socklen_t *addrlen) const {
     if (IsIPv4()) {
         if (*addrlen < (socklen_t)sizeof(struct sockaddr_in)) return false;

@@ -128,7 +128,9 @@ struct update_for_parent_inclusion {
     CTxMemPool::txiter iter;
 };
 
-/** Generate a new block, without valid proof-of-work */
+/** Generate a new block, without valid proof-of-work
+ * 创建一个不包含有效工作量的 新区块
+ * */
 class BlockAssembler {
 private:
     // The constructed block template

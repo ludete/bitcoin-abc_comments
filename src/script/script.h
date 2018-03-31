@@ -59,7 +59,7 @@ enum opcodetype {
     OP_8 = 0x58,
     OP_9 = 0x59,
     OP_10 = 0x5a,
-    OP_11 = 0x5b,
+    OP_11 = 0x5b,s
     OP_12 = 0x5c,
     OP_13 = 0x5d,
     OP_14 = 0x5e,

@@ -209,6 +209,7 @@ int CBase58Data::CompareTo(const CBase58Data &b58) const {
 
 namespace {
 /**
+ * /Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/base58.cpp
  * base58-encoded Bitcoin addresses.
  * Public-key-hash-addresses have version 0 (or 111 testnet).
  * The data vector contains RIPEMD160(SHA256(pubkey)), where pubkey is the

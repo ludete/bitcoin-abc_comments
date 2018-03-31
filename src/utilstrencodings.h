@@ -17,7 +17,7 @@
 #define END(a) ((char *)&((&(a))[1]))
 #define UBEGIN(a) ((uint8_t *)&(a))
 #define UEND(a) ((uint8_t *)&((&(a))[1]))
-#define ARRAYLEN(array) (sizeof(array) / sizeof((array)[0]))
+#define ARRAYLEN(array) (sizeof(array) / sizeof((array)[0]))        //数组的长度
 
 /** Used by SanitizeString() */
 enum SafeChars {

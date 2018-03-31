@@ -17,6 +17,7 @@
 //
 // Simple class for background tasks that should be run periodically or once
 // "after a while"
+//  后台任务线程类，执行定期任务或一次性任务
 //
 // Usage:
 //
@@ -31,8 +32,9 @@
 // t->join();
 // delete t;
 // delete s; // Must be done after thread is interrupted/joined.
+// 当线程结束，再清空任务队列。
 //
-
+// 任务线程
 class CScheduler {
 public:
     CScheduler();
@@ -72,7 +74,7 @@ private:
     std::multimap<boost::chrono::system_clock::time_point, Function> taskQueue;
     boost::condition_variable newTaskScheduled;
     mutable boost::mutex newTaskMutex;
-    int nThreadsServicingQueue;
+    int nThreadsServicingQueue;         //
     bool stopRequested;
     bool stopWhenEmpty;
     bool shouldStop() {

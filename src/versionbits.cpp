@@ -18,6 +18,7 @@ const struct BIP9DeploymentInfo
         },
 };
 
+//获取指定区块的版本号状态
 ThresholdState AbstractThresholdConditionChecker::GetStateFor(
     const CBlockIndex *pindexPrev, const Consensus::Params &params,
     ThresholdConditionCache &cache) const {
@@ -31,15 +32,16 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(
     // nPeriod - 1.
     if (pindexPrev != nullptr) {
         pindexPrev = pindexPrev->GetAncestor(
-            pindexPrev->nHeight - ((pindexPrev->nHeight + 1) % nPeriod));
+            pindexPrev->nHeight - ((pindexPrev->nHeight + 1) % nPeriod));   //查找这轮激活期间的第一个区块
     }
 
     // Walk backwards in steps of nPeriod to find a pindexPrev whose information
-    // is known
+    // is known  以nPeriod 为单位向后移动，寻找一个信息已知的pindexPrev
     std::vector<const CBlockIndex *> vToCompute;
+    //未找到该 索引时进入
     while (cache.count(pindexPrev) == 0) {
         if (pindexPrev == nullptr) {
-            // The genesis block is by definition defined.
+            // The genesis block is by definition defined.  本轮软分叉的首个区块被定义为 定义状态
             cache[pindexPrev] = THRESHOLD_DEFINED;
             break;
         }
@@ -73,6 +75,7 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(
                 break;
             }
             case THRESHOLD_STARTED: {
+                //1. 这段代码让它处于可以复用的状态
                 if (pindexPrev->GetMedianTimePast() >= nTimeTimeout) {
                     stateNext = THRESHOLD_FAILED;
                     break;
@@ -80,6 +83,8 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(
                 // We need to count
                 const CBlockIndex *pindexCount = pindexPrev;
                 int count = 0;
+
+                //2. 计算2014个块(即nPeriod期间)，成功部署该标识位的个数，然后判断该标识位是否为激活状态
                 for (int i = 0; i < nPeriod; i++) {
                     if (Condition(pindexCount, params)) {
                         count++;
@@ -108,9 +113,12 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(
     return state;
 }
 
+//
 int AbstractThresholdConditionChecker::GetStateSinceHeightFor(
     const CBlockIndex *pindexPrev, const Consensus::Params &params,
     ThresholdConditionCache &cache) const {
+
+
     const ThresholdState initialState = GetStateFor(pindexPrev, params, cache);
 
     // BIP 9 about state DEFINED: "The genesis block is by definition in this
@@ -123,7 +131,7 @@ int AbstractThresholdConditionChecker::GetStateSinceHeightFor(
 
     // A block's state is always the same as that of the first of its period, so
     // it is computed based on a pindexPrev whose height equals a multiple of
-    // nPeriod - 1. To ease understanding of the following height calculation,
+    // nPeriod - 1. To ease understanding ofv the following height calculation,
     // it helps to remember that right now pindexPrev points to the block prior
     // to the block that we are computing for, thus: if we are computing for the
     // last block of a period, then pindexPrev points to the second to last
@@ -131,10 +139,10 @@ int AbstractThresholdConditionChecker::GetStateSinceHeightFor(
     // period, then pindexPrev points to the last block of the previous period.
     // The parent of the genesis block is represented by nullptr.
     pindexPrev = pindexPrev->GetAncestor(pindexPrev->nHeight -
-                                         ((pindexPrev->nHeight + 1) % nPeriod));
+                                         ((pindexPrev->nHeight + 1) % nPeriod));        //找到本轮部署的第一个区块
 
     const CBlockIndex *previousPeriodParent =
-        pindexPrev->GetAncestor(pindexPrev->nHeight - nPeriod);
+        pindexPrev->GetAncestor(pindexPrev->nHeight - nPeriod);     //找到前 nPeriod 父区块
 
     while (previousPeriodParent != nullptr &&
            GetStateFor(previousPeriodParent, params, cache) == initialState) {
@@ -169,6 +177,7 @@ protected:
         return params.nRuleChangeActivationThreshold;
     }
 
+    //小端编码，前三位必须为001，并且指定的部署位为1，返回TRUE。 否则为false
     bool Condition(const CBlockIndex *pindex,
                    const Consensus::Params &params) const {
         return (((pindex->nVersion & VERSIONBITS_TOP_MASK) ==

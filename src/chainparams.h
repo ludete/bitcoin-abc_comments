@@ -27,7 +27,7 @@ struct SeedSpec6 {
     uint16_t port;
 };
 
-typedef std::map<int, uint256> MapCheckpoints;
+typedef std::map<int, uint256> MapCheckpoints;      //key:块的高度; value:块的哈希
 
 struct CCheckpointData {
     MapCheckpoints mapCheckpoints;
@@ -72,7 +72,9 @@ public:
     bool MiningRequiresPeers() const { return fMiningRequiresPeers; }
     /** Default value for -checkmempool and -checkblockindex argument */
     bool DefaultConsistencyChecks() const { return fDefaultConsistencyChecks; }
-    /** Policy: Filter transactions that do not match well-defined patterns */
+    /** Policy: Filter transactions that do not match well-defined patterns
+     * 过滤不符合最佳定义模式的交易
+     * */
     bool RequireStandard() const { return fRequireStandard; }
     uint64_t PruneAfterHeight() const { return nPruneAfterHeight; }
     /**

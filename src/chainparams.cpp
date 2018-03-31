@@ -110,7 +110,7 @@ public:
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         // 95% of 2016
-        consensus.nRuleChangeActivationThreshold = 1916;
+        consensus.nRuleChangeActivationThreshold = 1916;        //95%
         // nPowTargetTimespan / nPowTargetSpacing
         consensus.nMinerConfirmationWindow = 2016;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
@@ -302,7 +302,8 @@ public:
         // May 1st, 2017
         consensus.vDeployments[Consensus::DEPLOYMENT_CSV].nTimeout = 1493596800;
 
-        // The best chain should have at least this much work.
+
+
         consensus.nMinimumChainWork =
             uint256S("0x0000000000000000000000000000000000000000000000288002666"
                      "863267524");

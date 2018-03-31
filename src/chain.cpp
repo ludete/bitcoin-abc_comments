@@ -15,6 +15,8 @@ void CChain::SetTip(CBlockIndex *pindex) {
     }
 
     vChain.resize(pindex->nHeight + 1);
+    // 将该块以及它所有的父块都更新到激活链上。(因为从分叉点到该块可能含
+    // 有多个块，这些都需要在当前的激活链上进行更新)
     while (pindex && vChain[pindex->nHeight] != pindex) {
         vChain[pindex->nHeight] = pindex;
         pindex = pindex->pprev;
@@ -52,13 +54,15 @@ CBlockLocator CChain::GetLocator(const CBlockIndex *pindex) const {
     return CBlockLocator(vHave);
 }
 
+//查找当前链 在传入块索引之前的分叉块
 const CBlockIndex *CChain::FindFork(const CBlockIndex *pindex) const {
     if (pindex == nullptr) {
         return nullptr;
     }
     if (pindex->nHeight > Height()) {
-        pindex = pindex->GetAncestor(Height());
+        pindex = pindex->GetAncestor(Height()); //对pindex重新赋值，
     }
+    //如果链中不包含该区块，就继续循环。否则，则找到分叉块
     while (pindex && !Contains(pindex)) {
         pindex = pindex->pprev;
     }
@@ -148,6 +152,7 @@ int64_t GetBlockProofEquivalentTime(const CBlockIndex &to,
                                     const CBlockIndex &from,
                                     const CBlockIndex &tip,
                                     const Consensus::Params &params) {
+    //两个块中间间隔的工作量
     arith_uint256 r;
     int sign = 1;
     if (to.nChainWork > from.nChainWork) {
@@ -156,7 +161,9 @@ int64_t GetBlockProofEquivalentTime(const CBlockIndex &to,
         r = from.nChainWork - to.nChainWork;
         sign = -1;
     }
+    // nPowTargetSpacing = 10 * 60(10分钟)； 间隔的工作量* 时间间隔 / 当前Tip块的工作量；
     r = r * arith_uint256(params.nPowTargetSpacing) / GetBlockProof(tip);
+
     if (r.bits() > 63) {
         return sign * std::numeric_limits<int64_t>::max();
     }

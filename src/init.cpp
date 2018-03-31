@@ -2,7 +2,7 @@
 // Copyright (c) 2009-2016 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
+///Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/init.cpp
 #if defined(HAVE_CONFIG_H)
 #include "config/bitcoin-config.h"
 #endif
@@ -263,6 +263,7 @@ void Shutdown() {
 
 /**
  * Signal handlers are very limited in what they are allowed to do, so:
+ * 信号处理在被允许执行的操作方面非常受限。
  */
 void HandleSIGTERM(int) {
     fRequestShutdown = true;
@@ -1042,9 +1043,10 @@ void ThreadImport(const Config &config,
     fDumpMempoolLater = !fRequestShutdown;
 }
 
-/** Sanity checks
+/** Sanity checks； 合理的检查
  *  Ensure that Bitcoin is running in a usable environment with all
  *  necessary library support.
+ *  检查，保证比特币运行在一个安装了所有依赖库的可用环境中。
  */
 bool InitSanityCheck(void) {
     if (!ECC_InitSanityCheck()) {
@@ -1077,7 +1079,7 @@ static bool AppInitServers(Config &config, boost::thread_group &threadGroup) {
     return true;
 }
 
-// Parameter interaction based on rules
+// Parameter interaction based on rules 依 据规则进行参数交互
 void InitParameterInteraction() {
     // when specifying an explicit binding address, you want to listen on it
     // even when -connect or -proxy is specified.
@@ -1207,6 +1209,7 @@ ServiceFlags nLocalServices = NODE_NETWORK;
     std::terminate();
 };
 
+//第一步
 bool AppInitBasicSetup() {
 // Step 1: setup
 #ifdef _MSC_VER
@@ -1238,11 +1241,12 @@ bool AppInitBasicSetup() {
     if (!SetupNetworking()) return InitError("Initializing networking failed");
 
 #ifndef WIN32
+    // 设置创建文件的掩码
     if (!GetBoolArg("-sysperms", false)) {
         umask(077);
     }
 
-    // Clean shutdown on SIGTERM
+    // Clean shutdown on SIGTERM  设置unix信号操作
     struct sigaction sa;
     sa.sa_handler = HandleSIGTERM;
     sigemptyset(&sa.sa_mask);
@@ -1267,6 +1271,7 @@ bool AppInitBasicSetup() {
     return true;
 }
 
+// 设置参数交互
 bool AppInitParameterInteraction(Config &config) {
     const CChainParams &chainparams = Params();
     // Step 2: parameter interactions
@@ -1288,7 +1293,7 @@ bool AppInitParameterInteraction(Config &config) {
                            "[0..100] interval."));
     }
 
-    // Make sure enough file descriptors are available
+    // Make sure enough file descriptors are available;
     int nBind = std::max(
         (mapMultiArgs.count("-bind") ? mapMultiArgs.at("-bind").size() : 0) +
             (mapMultiArgs.count("-whitebind")
@@ -1577,6 +1582,10 @@ bool AppInitParameterInteraction(Config &config) {
     return true;
 }
 
+// 此处使用了一个文件锁，每次当bitcoin启动时，都会去尝试获取这个文件锁，
+// 如果上锁失败，标识可能已经有bitcoin进程在启动，获取了该文件锁，当前进程就不可以使用了。
+// 此处可以用以攻击，写一个木马程序，放在机器上，获取这个文件锁不释放，
+// 那么当前的客户端就不可能再被启动，因为它获取不到这个文件锁了。
 static bool LockDataDirectory(bool probeOnly) {
     std::string strDataDir = GetDataDir().string();
 
@@ -1607,23 +1616,27 @@ static bool LockDataDirectory(bool probeOnly) {
     return true;
 }
 
+//进行合理的检查
 bool AppInitSanityChecks() {
     // Step 4: sanity checks
 
-    // Initialize elliptic curve code
+    // Initialize elliptic curve code 初始化椭圆曲线的代码
     ECC_Start();
+    // 创建一个ECC对象，交给全局的unique_ptr 指针管理
     globalVerifyHandle.reset(new ECCVerifyHandle());
 
-    // Sanity check
+    // Sanity check 随机数，加密库的，以及其他的一些依赖库的检测
     if (!InitSanityCheck())
         return InitError(strprintf(
             _("Initialization sanity check failed. %s is shutting down."),
             _(PACKAGE_NAME)));
 
     // Probe the data directory lock to give an early error message, if possible
+    // 获取文件锁，
     return LockDataDirectory(true);
 }
 
+// 初始化的入口
 bool AppInitMain(Config &config, boost::thread_group &threadGroup,
                  CScheduler &scheduler) {
     const CChainParams &chainparams = Params();
@@ -1633,6 +1646,7 @@ bool AppInitMain(Config &config, boost::thread_group &threadGroup,
     // until exit. This creates a slight window for a race condition to happen,
     // however this condition is harmless: it will at most make us exit without
     // printing a message to console.
+    // 获取文件锁
     if (!LockDataDirectory(false)) {
         // Detailed error printed inside LockDataDirectory
         return false;
@@ -1665,6 +1679,7 @@ bool AppInitMain(Config &config, boost::thread_group &threadGroup,
 
     LogPrintf("Using %u threads for script verification\n",
               nScriptCheckThreads);
+    //
     if (nScriptCheckThreads) {
         for (int i = 0; i < nScriptCheckThreads - 1; i++) {
             threadGroup.create_thread(&ThreadScriptCheck);

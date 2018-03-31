@@ -14,6 +14,7 @@
 
 BOOST_FIXTURE_TEST_SUITE(blockcheck_tests, BasicTestingSetup)
 
+//  运行块
 static void RunCheckOnBlockImpl(const GlobalConfig &config, const CBlock &block,
                                 CValidationState &state, bool expected) {
     block.fChecked = false;
@@ -29,6 +30,7 @@ static void RunCheckOnBlock(const GlobalConfig &config, const CBlock &block) {
     RunCheckOnBlockImpl(config, block, state, true);
 }
 
+// 运行块的检查
 static void RunCheckOnBlock(const GlobalConfig &config, const CBlock &block,
                             const std::string &reason) {
     CValidationState state;
@@ -43,7 +45,7 @@ BOOST_AUTO_TEST_CASE(blockfail) {
 
     // Set max blocksize to default in case other tests left it dirty
     GlobalConfig config;
-    config.SetMaxBlockSize(DEFAULT_MAX_BLOCK_SIZE);
+    config.SetMaxBlockSize(DEFAULT_MAX_BLOCK_SIZE);     //设置块的大小，默认为8M。
 
     CBlock block;
     RunCheckOnBlock(config, block, "bad-cb-missing");

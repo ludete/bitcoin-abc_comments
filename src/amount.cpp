@@ -14,26 +14,28 @@ std::string Amount::ToString() const {
                      amount % COIN.GetSatoshis(), CURRENCY_UNIT);
 }
 
+// nFeePaid(in): nBytes_个字节的总交易费； nBytes_(in):总的字节个数；
 CFeeRate::CFeeRate(const Amount nFeePaid, size_t nBytes_) {
     assert(nBytes_ <= uint64_t(std::numeric_limits<int64_t>::max()));
     int64_t nSize = int64_t(nBytes_);
 
     if (nSize > 0) {
-        nSatoshisPerK = 1000 * nFeePaid / nSize;
+        nSatoshisPerK = 1000 * nFeePaid / nSize;        //计算当前每千字节的交易费
     } else {
         nSatoshisPerK = 0;
     }
 }
 
+//返回该字节总的交易费
 Amount CFeeRate::GetFee(size_t nBytes_) const {
     assert(nBytes_ <= uint64_t(std::numeric_limits<int64_t>::max()));
     int64_t nSize = int64_t(nBytes_);
 
-    Amount nFee = nSize * nSatoshisPerK / 1000;
+    Amount nFee = nSize * nSatoshisPerK / 1000;     //返回该字节总的交易费
 
     if (nFee == 0 && nSize != 0) {
         if (nSatoshisPerK > 0) {
-            nFee = Amount(1);
+            nFee = Amount(1);               //如果千字节费率大于0，则返回 这些字节总的费为1.
         }
         if (nSatoshisPerK < 0) {
             nFee = Amount(-1);

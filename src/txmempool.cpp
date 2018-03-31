@@ -54,12 +54,17 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry &other) {
     *this = other;
 }
 
+// currentHeight(in):交易进入交易池时，主链的下个区块的高度(Tip +1)
+//获取交易池中交易条目基于某个高度时的优先级
 double CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const {
+    //高度差*交易的引用输入总金额 / 可修改的交易大小
     double deltaPriority = double((currentHeight - entryHeight) *
                                   inChainInputValue.GetSatoshis()) /
                            nModSize;
+    //将两次的优先级进行累加
     double dResult = entryPriority + deltaPriority;
     // This should only happen if it was called with a height below entry height
+    // dResult<0这种情况之只可能发生在一个调用高度 < 交易进入交易池时的高度(意味着块链重组时，主链的高度大幅度降低)
     if (dResult < 0) dResult = 0;
     return dResult;
 }
@@ -80,13 +85,15 @@ void CTxMemPoolEntry::UpdateLockPoints(const LockPoints &lp) {
 void CTxMemPool::UpdateForDescendants(txiter updateIt,
                                       cacheMap &cachedDescendants,
                                       const std::set<uint256> &setExclude) {
-    setEntries stageEntries, setAllDescendants;
+    setEntries stageEntries, setAllDescendants;     //值语义
+    // 获取该交易的子交易集合
     stageEntries = GetMemPoolChildren(updateIt);
 
+    // 遍历所有的子交易，查询这些子交易是否在；
     while (!stageEntries.empty()) {
         const txiter cit = *stageEntries.begin();
         setAllDescendants.insert(cit);
-        stageEntries.erase(cit);
+        stageEntries.erase(cit);        //删除临时集合中的元素
         const setEntries &setChildren = GetMemPoolChildren(cit);
         for (const txiter childEntry : setChildren) {
             cacheMap::iterator cacheIt = cachedDescendants.find(childEntry);
@@ -102,6 +109,7 @@ void CTxMemPool::UpdateForDescendants(txiter updateIt,
             }
         }
     }
+
     // setAllDescendants now contains all in-mempool descendants of updateIt.
     // Update and add to cached descendant map
     int64_t modifySize = 0;
@@ -175,6 +183,7 @@ void CTxMemPool::UpdateTransactionsFromBlock(
     }
 }
 
+// entry(in):查询该交易在交易池中的所有祖先； 。
 bool CTxMemPool::CalculateMemPoolAncestors(
     const CTxMemPoolEntry &entry, setEntries &setAncestors,
     uint64_t limitAncestorCount, uint64_t limitAncestorSize,
@@ -185,10 +194,12 @@ bool CTxMemPool::CalculateMemPoolAncestors(
     setEntries parentHashes;
     const CTransaction &tx = entry.GetTx();
 
+    //默认情况下进入这里；该参数的默认值为true,
     if (fSearchForParents) {
         // Get parents of this transaction that are in the mempool
         // GetMemPoolParents() is only valid for entries in the mempool, so we
         // iterate mapTx to find parents.
+        // 查询该交易在交易池的父交易； 即它所引用输出的交易是否在交易池中；如果在，将它们添加到临时集合中
         for (unsigned int i = 0; i < tx.vin.size(); i++) {
             txiter piter = mapTx.find(tx.vin[i].prevout.hash);
             if (piter != mapTx.end()) {
@@ -210,6 +221,7 @@ bool CTxMemPool::CalculateMemPoolAncestors(
 
     size_t totalSizeWithAncestors = entry.GetTxSize();
 
+    // 如果父交易集合不为空；
     while (!parentHashes.empty()) {
         txiter stageit = *parentHashes.begin();
 
@@ -254,13 +266,20 @@ bool CTxMemPool::CalculateMemPoolAncestors(
     return true;
 }
 
+//更新该交易所有的祖先交易信息；
+//it(in):更新的交易； setAncestors(in):该交易的所有祖先交易; add(in):true,添加新交易； false, 删除新交易
 void CTxMemPool::UpdateAncestorsOf(bool add, txiter it,
                                    setEntries &setAncestors) {
+    //1. 获取该交易的父交易
     setEntries parentIters = GetMemPoolParents(it);
+
     // add or remove this tx as a child of each parent
+    // 从父交易中添加或删除这个子交易
     for (txiter piter : parentIters) {
         UpdateChild(piter, it, add);
     }
+
+    // 更新所有的祖先交易的状态
     const int64_t updateCount = (add ? 1 : -1);
     const int64_t updateSize = updateCount * it->GetTxSize();
     const Amount updateFee = updateCount * it->GetModifiedFee();
@@ -270,6 +289,7 @@ void CTxMemPool::UpdateAncestorsOf(bool add, txiter it,
     }
 }
 
+// 更新这个交易中所有的祖先交易状态；
 void CTxMemPool::UpdateEntryForAncestors(txiter it,
                                          const setEntries &setAncestors) {
     int64_t updateCount = setAncestors.size();
@@ -286,30 +306,41 @@ void CTxMemPool::UpdateEntryForAncestors(txiter it,
 }
 
 void CTxMemPool::UpdateChildrenForRemoval(txiter it) {
+    // 获取移除交易的子交易集合
     const setEntries &setMemPoolChildren = GetMemPoolChildren(it);
     for (txiter updateIt : setMemPoolChildren) {
         UpdateParent(updateIt, it, false);
     }
 }
 
+// 因为移除操作，更新交易池的状态；
+// entriesToRemove(in): 移除的交易；updateDescendants(in):true：更新移除交易的所有后代交易；
+// false：仅更新移除交易的子交易。
+// 函数执行完后，将entriesToRemove 集合中每个交易的子交易集合 中的交易，从这些交易的父集合中删除这个交易。
 void CTxMemPool::UpdateForRemoveFromMempool(const setEntries &entriesToRemove,
                                             bool updateDescendants) {
     // For each entry, walk back all ancestors and decrement size associated
     // with this transaction.
     const uint64_t nNoLimit = std::numeric_limits<uint64_t>::max();
+    // 更新所有的后代交易
     if (updateDescendants) {
         // updateDescendants should be true whenever we're not recursively
         // removing a tx and all its descendants, eg when a transaction is
         // confirmed in a block. Here we only update statistics and not data in
         // mapLinks (which we need to preserve until we're finished with all
         // operations that need to traverse the mempool).
+        //  updateDescendants 应当为true，只要当我们不递归移除这个交易和它所有的后代交易，例如：当一个交易在块中被确认，
+        // 只需要移除交易即可，不需要移除它的后代交易。此时我们只更新统计数据，而不是在mapLinks中的数据
         for (txiter removeIt : entriesToRemove) {
             setEntries setDescendants;
+            // 获取一个交易的所有的后代交易
             CalculateDescendants(removeIt, setDescendants);
             setDescendants.erase(removeIt); // don't update state for self
             int64_t modifySize = -((int64_t)removeIt->GetTxSize());
             Amount modifyFee = -1 * removeIt->GetModifiedFee();
             int modifySigOps = -removeIt->GetSigOpCount();
+
+            // 仅更新这些后代交易的祖先交易的状态；如：祖先交易的大小，交易费等。
             for (txiter dit : setDescendants) {
                 mapTx.modify(dit, update_ancestor_state(modifySize, modifyFee,
                                                         -1, modifySigOps));
@@ -338,15 +369,19 @@ void CTxMemPool::UpdateForRemoveFromMempool(const setEntries &entriesToRemove,
         // parents we'd calculate by searching, and it's important that we use
         // the mapLinks[] notion of ancestor transactions as the set of things
         // to update for removal.
+        // 获取删除交易在交易池中的 所有的祖先交易
         CalculateMemPoolAncestors(entry, setAncestors, nNoLimit, nNoLimit,
                                   nNoLimit, nNoLimit, dummy, false);
         // Note that UpdateAncestorsOf severs the child links that point to
         // removeIt in the entries for the parents of removeIt.
+        // 更新移除交易的 所有祖先交易的后代交易的状态。
         UpdateAncestorsOf(false, removeIt, setAncestors);
     }
+
     // After updating all the ancestor sizes, we can now sever the link between
     // each transaction being removed and any mempool children (ie, update
     // setMemPoolParents for each direct child of a transaction being removed).
+    // 更新完所有的祖先交易后，现在隔断每个被移除的交易和 它子交易之间的链接。
     for (txiter removeIt : entriesToRemove) {
         UpdateChildrenForRemoval(removeIt);
     }
@@ -412,9 +447,12 @@ bool CTxMemPool::addUnchecked(const uint256 &hash, const CTxMemPoolEntry &entry,
     // Add to memory pool without checking anything.
     // Used by AcceptToMemoryPool(), which DOES do all the appropriate checks.
     LOCK(cs);
+    //1.  将新交易加入交易池
     indexed_transaction_set::iterator newit = mapTx.insert(entry).first;
+    //2. 为新交易创建父子交易对
     mapLinks.insert(make_pair(newit, TxLinks()));
 
+    // 此处在新代码中可以省略； 此处用来进行挖矿方面的设定
     // Update transaction for any feeDelta created by PrioritiseTransaction
     // TODO: refactor so that the fee delta is calculated before inserting into
     // mapTx.
@@ -430,8 +468,11 @@ bool CTxMemPool::addUnchecked(const uint256 &hash, const CTxMemPoolEntry &entry,
     // Update cachedInnerUsage to include contained transaction's usage.
     // (When we update the entry for in-mempool parents, memory usage will be
     // further updated.)
+    //3. 更新交易池的消耗
     cachedInnerUsage += entry.DynamicMemoryUsage();
 
+    //4. 构建交易池中的UTXO引用对；即每个交易的引用输入与该交易添加到交易池的缓存数据结构中。
+    // 并将该交易的哈希添加到临时父交易的集合中
     const CTransaction &tx = newit->GetTx();
     std::set<uint256> setParentTransactions;
     for (unsigned int i = 0; i < tx.vin.size(); i++) {
@@ -445,13 +486,15 @@ bool CTxMemPool::addUnchecked(const uint256 &hash, const CTxMemPoolEntry &entry,
     // disconnect block logic will call UpdateTransactionsFromBlock to clean up
     // the mess we're leaving here.
 
-    // Update ancestors with information about this tx
+    // Update ancestors with information about this tx； 更新该交易的父交易的集合；注意:此时更新的父交易必须存在于交易池中。
+    // 即：将这些已存在于交易池的父交易添加到这个交易的 父交易集合中(注意：只是父交易，非所有的祖先交易)
     for (const uint256 &phash : setParentTransactions) {
         txiter pit = mapTx.find(phash);
         if (pit != mapTx.end()) {
-            UpdateParent(newit, pit, true);
+            UpdateParent(newit, pit, true);         //向该交易的父交易集合中 添加这些父交易
         }
     }
+    // 更新该交易的祖先交易信息
     UpdateAncestorsOf(true, newit, setAncestors);
     UpdateEntryForAncestors(newit, setAncestors);
 
@@ -465,6 +508,7 @@ bool CTxMemPool::addUnchecked(const uint256 &hash, const CTxMemPoolEntry &entry,
     return true;
 }
 
+// 从交易池移除这个交易
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason) {
     NotifyEntryRemoved(it->GetSharedTx(), reason);
     const uint256 txid = it->GetTx().GetId();
@@ -520,6 +564,7 @@ void CTxMemPool::CalculateDescendants(txiter entryit,
     }
 }
 
+//递归删除产生冲突的交易； 应该删除该交易和它所有的后代交易
 void CTxMemPool::removeRecursive(const CTransaction &origTx,
                                  MemPoolRemovalReason reason) {
     // Remove transaction from memory pool
@@ -534,6 +579,7 @@ void CTxMemPool::removeRecursive(const CTransaction &origTx,
             // to remove any children that are in the pool. This can happen
             // during chain re-orgs if origTx isn't re-accepted into the mempool
             // for any reason.
+            // 当递归删除的交易不在交易池中时，为了确保它的所有后代交易都被删除，我们需要查找交易池中是否有把它作为 UTXO来花费的交易。
             for (unsigned int i = 0; i < origTx.vout.size(); i++) {
                 auto it = mapNextTx.find(COutPoint(origTx.GetId(), i));
                 if (it == mapNextTx.end()) continue;
@@ -544,45 +590,61 @@ void CTxMemPool::removeRecursive(const CTransaction &origTx,
         }
         setEntries setAllRemoves;
         for (txiter it : txToRemove) {
+            //计算该交易的所有后代交易
             CalculateDescendants(it, setAllRemoves);
         }
 
+        //移除 所有的交易
         RemoveStaged(setAllRemoves, false, reason);
     }
 }
 
 void CTxMemPool::removeForReorg(const CCoinsViewCache *pcoins,
                                 unsigned int nMemPoolHeight, int flags) {
+    // 移除交易池中花费未成熟的UTXO的交易，因为块链进行了重组，可能以前成熟的块，现在变得未成熟。
     // Remove transactions spending a coinbase which are now immature and
     // no-longer-final transactions
     LOCK(cs);
     setEntries txToRemove;
     for (indexed_transaction_set::const_iterator it = mapTx.begin();
          it != mapTx.end(); it++) {
+
+        //1. 获取交易的锁定点进行检测
         const CTransaction &tx = it->GetTx();
         LockPoints lp = it->GetLockPoints();
         bool validLP = TestLockPointValidity(&lp);
 
         auto &config = GetConfig();
         CValidationState state;
+        // 将所有在当前重组后的链不符合规则的交易加入 移除集合，等待后面的移除。
+        // 执行该交易检查 和 BIP68的检查；失败后，将失败的交易加入 移除集合。
         if (!ContextualCheckTransactionForCurrentBlock(
                 config, tx, state, config.GetChainParams().GetConsensus(),
                 flags) ||
             !CheckSequenceLocks(tx, flags, &lp, validLP)) {
+
             // Note if CheckSequenceLocks fails the LockPoints may still be
             // invalid. So it's critical that we remove the tx and not depend on
             // the LockPoints.
             txToRemove.insert(it);
-        } else if (it->GetSpendsCoinbase()) {
+        } else if (it->GetSpendsCoinbase()) {       //如果一个交易通过了上面的检查，就继续检查该交易是否花费了一个coinbase交易
+
+            // 遍历该交易的所有交易输入
             for (const CTxIn &txin : tx.vin) {
+                // 查找这些引用输出的交易是否存在于交易池中， 如果存在，就略过该交易输入，引入coinbase交易不进入交易池。
                 indexed_transaction_set::const_iterator it2 =
                     mapTx.find(txin.prevout.hash);
                 if (it2 != mapTx.end()) {
                     continue;
                 }
 
+                // 在UTXO集合中查询该交易的这些引用输出所对应的UTXO。
                 const Coin &coin = pcoins->AccessCoin(txin.prevout);
+
+                // 标识开启mempool检查；则这些交易一定是未花费的。
                 if (nCheckFrequency != 0) assert(!coin.IsSpent());
+
+                // 如果有任何一个将花费的 UTXO已花费 或 将花费的coinbase还未成熟，也将这个交易加入待删除集合。
                 if (coin.IsSpent() ||
                     (coin.IsCoinBase() &&
                      int64_t(nMemPoolHeight) - coin.GetHeight() <
@@ -592,10 +654,14 @@ void CTxMemPool::removeForReorg(const CCoinsViewCache *pcoins,
                 }
             }
         }
+
+        //如果
         if (!validLP) {
             mapTx.modify(it, update_lock_points(lp));
         }
     }
+
+    // 拿到删除集合后，删除这个集合中所有的交易和它的后代交易
     setEntries setAllRemoves;
     for (txiter it : txToRemove) {
         CalculateDescendants(it, setAllRemoves);
@@ -603,11 +669,16 @@ void CTxMemPool::removeForReorg(const CCoinsViewCache *pcoins,
     RemoveStaged(setAllRemoves, false, MemPoolRemovalReason::REORG);
 }
 
+// 移除冲突的交易，需要递归删除交易池中 所有与该交易 花费相同UTXO的交易；
+// 因为该UTXO已被这个交易花费了，交易池中再花费这个UTXO的交易就违法了。
 void CTxMemPool::removeConflicts(const CTransaction &tx) {
     // Remove transactions which depend on inputs of tx, recursively
+    // 移除依赖该交易引用输入的交易，因为该交易已被打包进区块，这个UTXO已被花费，
+    // 所以所有交易池中引用这些UTXO的也应该被删除
     LOCK(cs);
     for (const CTxIn &txin : tx.vin) {
         auto it = mapNextTx.find(txin.prevout);
+        // 查找交易池中花费 与该交易的引用输出相同的交易；递归删除该交易和它的所有后代交易。
         if (it != mapNextTx.end()) {
             const CTransaction &txConflict = *it->second;
             if (txConflict != tx) {
@@ -621,10 +692,13 @@ void CTxMemPool::removeConflicts(const CTransaction &tx) {
 /**
  * Called when a block is connected. Removes from mempool and updates the miner
  * fee estimator.
+ * vtx(in):要移除的块中的交易交易集合(因为该块中的交易已被打包)；
+ * nBlockHeight(in):这些交易所对应的块高度
  */
 void CTxMemPool::removeForBlock(const std::vector<CTransactionRef> &vtx,
                                 unsigned int nBlockHeight) {
     LOCK(cs);
+    //收集该区块中 在交易池中的交易
     std::vector<const CTxMemPoolEntry *> entries;
     for (const auto &tx : vtx) {
         uint256 txid = tx->GetId();
@@ -634,6 +708,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef> &vtx,
     }
     // Before the txs in the new block have been removed from the mempool,
     // update policy estimates
+    // 在新块中的交易从mempool移除时，需要更新mempool的策略预估
     minerPolicyEstimator->processBlock(nBlockHeight, entries);
     for (const auto &tx : vtx) {
         txiter it = mapTx.find(tx->GetId());
@@ -668,6 +743,7 @@ void CTxMemPool::clear() {
 }
 
 void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
+    //查看完整性检查；如果未打开，直接返回。
     if (nCheckFrequency == 0) return;
 
     if (GetRand(std::numeric_limits<uint32_t>::max()) >= nCheckFrequency)
@@ -680,102 +756,126 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
     uint64_t innerUsage = 0;
 
     CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache *>(pcoins));
+    // 获取当前UTXO集合最高的块索引的 + 1； 即等于本节点接收到下个块的高度。
     const int64_t nSpendHeight = GetSpendHeight(mempoolDuplicate);
 
     LOCK(cs);
+
     std::list<const CTxMemPoolEntry *> waitingOnDependants;
+
+    //遍历整个交易池的 所有交易
     for (indexed_transaction_set::const_iterator it = mapTx.begin();
          it != mapTx.end(); it++) {
-        unsigned int i = 0;
-        checkTotal += it->GetTxSize();
-        innerUsage += it->DynamicMemoryUsage();
-        const CTransaction &tx = it->GetTx();
-        txlinksMap::const_iterator linksiter = mapLinks.find(it);
-        assert(linksiter != mapLinks.end());
-        const TxLinks &links = linksiter->second;
-        innerUsage += memusage::DynamicUsage(links.parents) +
-                      memusage::DynamicUsage(links.children);
-        bool fDependsWait = false;
-        setEntries setParentCheck;
-        int64_t parentSizes = 0;
-        int64_t parentSigOpCount = 0;
-        for (const CTxIn &txin : tx.vin) {
-            // Check that every mempool transaction's inputs refer to available
-            // coins, or other mempool tx's.
-            indexed_transaction_set::const_iterator it2 =
-                mapTx.find(txin.prevout.hash);
-            if (it2 != mapTx.end()) {
-                const CTransaction &tx2 = it2->GetTx();
-                assert(tx2.vout.size() > txin.prevout.n &&
-                       !tx2.vout[txin.prevout.n].IsNull());
-                fDependsWait = true;
-                if (setParentCheck.insert(it2).second) {
-                    parentSizes += it2->GetTxSize();
-                    parentSigOpCount += it2->GetSigOpCount();
+
+            unsigned int i = 0;         //累计交易池中所有 交易输入的数量
+            checkTotal += it->GetTxSize();
+            innerUsage += it->DynamicMemoryUsage();
+            const CTransaction &tx = it->GetTx();
+            txlinksMap::const_iterator linksiter = mapLinks.find(it);
+            assert(linksiter != mapLinks.end());
+            const TxLinks &links = linksiter->second;
+            innerUsage += memusage::DynamicUsage(links.parents) +
+                          memusage::DynamicUsage(links.children);
+            bool fDependsWait = false;      //标识交易池中的交易有互相依赖；即存在未花费的交易链。
+            setEntries setParentCheck;      //该集合存储这个交易 依赖的交易池中的交易。
+            int64_t parentSizes = 0;
+            int64_t parentSigOpCount = 0;
+
+            //遍历交易的 每个交易输入
+            for (const CTxIn &txin : tx.vin) {
+                // Check that every mempool transaction's inputs refer to available
+                // coins, or other mempool tx's.
+                // 检查每个mempool中的交易 要么引用一个有效的 UTXO集合中的UTXO，要么引用了一个在mempool中的交易。
+                indexed_transaction_set::const_iterator it2 =
+                    mapTx.find(txin.prevout.hash);
+                if (it2 != mapTx.end()) {
+
+                    const CTransaction &tx2 = it2->GetTx();
+                    assert(tx2.vout.size() > txin.prevout.n &&
+                           !tx2.vout[txin.prevout.n].IsNull());
+                    fDependsWait = true;
+
+                    //将这个依赖的交易加入临时集合中，(即:当一个新交易依赖于交易池中的交易时，以它作为父交易，)
+                    if (setParentCheck.insert(it2).second) {
+                        parentSizes += it2->GetTxSize();
+                        parentSigOpCount += it2->GetSigOpCount();
+                    }
+                } else {
+                    //依赖的交易此时必须存在于 UTXO集合中
+                    assert(pcoins->HaveCoin(txin.prevout));
                 }
-            } else {
-                assert(pcoins->HaveCoin(txin.prevout));
+
+                // Check whether its inputs are marked in mapNextTx.
+                // 检查是否这个交易输入的引用输出 在交易池的 mapNextTx 结构中。
+                auto it3 = mapNextTx.find(txin.prevout);
+                assert(it3 != mapNextTx.end());
+                assert(it3->first == &txin.prevout);
+                assert(it3->second == &tx);
+                i++;
             }
-            // Check whether its inputs are marked in mapNextTx.
-            auto it3 = mapNextTx.find(txin.prevout);
-            assert(it3 != mapNextTx.end());
-            assert(it3->first == &txin.prevout);
-            assert(it3->second == &tx);
-            i++;
-        }
-        assert(setParentCheck == GetMemPoolParents(it));
-        // Verify ancestor state is correct.
-        setEntries setAncestors;
-        uint64_t nNoLimit = std::numeric_limits<uint64_t>::max();
-        std::string dummy;
-        CalculateMemPoolAncestors(*it, setAncestors, nNoLimit, nNoLimit,
-                                  nNoLimit, nNoLimit, dummy);
-        uint64_t nCountCheck = setAncestors.size() + 1;
-        uint64_t nSizeCheck = it->GetTxSize();
-        Amount nFeesCheck = it->GetModifiedFee();
-        int64_t nSigOpCheck = it->GetSigOpCount();
 
-        for (txiter ancestorIt : setAncestors) {
-            nSizeCheck += ancestorIt->GetTxSize();
-            nFeesCheck += ancestorIt->GetModifiedFee();
-            nSigOpCheck += ancestorIt->GetSigOpCount();
-        }
+            //此时这个集合必须相等，因为它已经存储了这个交易的所有父交易。
+            assert(setParentCheck == GetMemPoolParents(it));
 
-        assert(it->GetCountWithAncestors() == nCountCheck);
-        assert(it->GetSizeWithAncestors() == nSizeCheck);
-        assert(it->GetSigOpCountWithAncestors() == nSigOpCheck);
-        assert(it->GetModFeesWithAncestors() == nFeesCheck);
 
-        // Check children against mapNextTx
-        CTxMemPool::setEntries setChildrenCheck;
-        auto iter = mapNextTx.lower_bound(COutPoint(it->GetTx().GetId(), 0));
-        int64_t childSizes = 0;
-        for (; iter != mapNextTx.end() &&
-               iter->first->hash == it->GetTx().GetId();
-             ++iter) {
-            txiter childit = mapTx.find(iter->second->GetId());
-            assert(childit !=
-                   mapTx.end()); // mapNextTx points to in-mempool transactions
-            if (setChildrenCheck.insert(childit).second) {
-                childSizes += childit->GetTxSize();
+            // Verify ancestor state is correct.
+            setEntries setAncestors;
+            uint64_t nNoLimit = std::numeric_limits<uint64_t>::max();
+            std::string dummy;
+            // 获取这个交易的所有祖先交易
+            CalculateMemPoolAncestors(*it, setAncestors, nNoLimit, nNoLimit,
+                                      nNoLimit, nNoLimit, dummy);
+            // 累计这个交易的祖先交易 和它的所有状态；查看是否与这个交易本身的记录相等。
+            uint64_t nCountCheck = setAncestors.size() + 1;
+            uint64_t nSizeCheck = it->GetTxSize();
+            Amount nFeesCheck = it->GetModifiedFee();
+            int64_t nSigOpCheck = it->GetSigOpCount();
+            for (txiter ancestorIt : setAncestors) {
+                nSizeCheck += ancestorIt->GetTxSize();
+                nFeesCheck += ancestorIt->GetModifiedFee();
+                nSigOpCheck += ancestorIt->GetSigOpCount();
             }
-        }
-        assert(setChildrenCheck == GetMemPoolChildren(it));
-        // Also check to make sure size is greater than sum with immediate
-        // children. Just a sanity check, not definitive that this calc is
-        // correct...
-        assert(it->GetSizeWithDescendants() >= childSizes + it->GetTxSize());
 
-        if (fDependsWait)
-            waitingOnDependants.push_back(&(*it));
-        else {
-            CValidationState state;
-            bool fCheckResult = tx.IsCoinBase() ||
-                                Consensus::CheckTxInputs(
-                                    tx, state, mempoolDuplicate, nSpendHeight);
-            assert(fCheckResult);
-            UpdateCoins(tx, mempoolDuplicate, 1000000);
-        }
+            assert(it->GetCountWithAncestors() == nCountCheck);
+            assert(it->GetSizeWithAncestors() == nSizeCheck);
+            assert(it->GetSigOpCountWithAncestors() == nSigOpCheck);
+            assert(it->GetModFeesWithAncestors() == nFeesCheck);
+
+            // Check children against mapNextTx；
+            // 检查这个子交易
+            CTxMemPool::setEntries setChildrenCheck;        //存储这个交易的子交易
+            auto iter = mapNextTx.lower_bound(COutPoint(it->GetTx().GetId(), 0));
+            int64_t childSizes = 0;
+            for (; iter != mapNextTx.end() &&
+                   iter->first->hash == it->GetTx().GetId();
+                 ++iter) {
+                txiter childit = mapTx.find(iter->second->GetId());
+                assert(childit !=
+                       mapTx.end()); // mapNextTx points to in-mempool transactions
+                if (setChildrenCheck.insert(childit).second) {
+                    childSizes += childit->GetTxSize();
+                }
+            }
+
+            //这个交易的子交易必须相等
+            assert(setChildrenCheck == GetMemPoolChildren(it));
+            // Also check to make sure size is greater than sum with immediate
+            // children. Just a sanity check, not definitive that this calc is
+            // correct...
+            //
+            assert(it->GetSizeWithDescendants() >= childSizes + it->GetTxSize());
+            //如果这个交易依赖于交易池中的其他交易，将它加入这个集合。
+            if (fDependsWait)
+                waitingOnDependants.push_back(&(*it));
+            else {
+                //检查这个交易的交易输入
+                CValidationState state;
+                bool fCheckResult = tx.IsCoinBase() ||
+                                    Consensus::CheckTxInputs(
+                                        tx, state, mempoolDuplicate, nSpendHeight);
+                assert(fCheckResult);
+                UpdateCoins(tx, mempoolDuplicate, 1000000);
+            }
     }
     unsigned int stepsSinceLastRemove = 0;
     while (!waitingOnDependants.empty()) {
@@ -991,6 +1091,8 @@ void CTxMemPool::PrioritiseTransaction(const uint256 hash,
               dPriorityDelta, FormatMoney(nFeeDelta));
 }
 
+// 如果交易池中已存在该交易，获取交易在交易池中的交易费和优先级
+// hash(in): 该交易的哈希； nFeeDelta(out):一个交易的交易费。dPriorityDelta(out):传出值，依据交易费算出的优先级
 void CTxMemPool::ApplyDeltas(const uint256 hash, double &dPriorityDelta,
                              Amount &nFeeDelta) const {
     LOCK(cs);
@@ -1007,6 +1109,7 @@ void CTxMemPool::ClearPrioritisation(const uint256 hash) {
     mapDeltas.erase(hash);
 }
 
+// 交易池含有该交易中的某个引用交易时，返回false； 都不存在时，返回TRUE。
 bool CTxMemPool::HasNoInputsOf(const CTransaction &tx) const {
     for (unsigned int i = 0; i < tx.vin.size(); i++)
         if (exists(tx.vin[i].prevout.hash)) return false;
@@ -1017,6 +1120,7 @@ CCoinsViewMemPool::CCoinsViewMemPool(CCoinsView *baseIn,
                                      const CTxMemPool &mempoolIn)
     : CCoinsViewBacked(baseIn), mempool(mempoolIn) {}
 
+//先查找矿池中是否有该outpoint，如果没有，再查UTXO集合中是否有该outpoint
 bool CCoinsViewMemPool::GetCoin(const COutPoint &outpoint, Coin &coin) const {
     // If an entry in the mempool exists, always return that one, as it's
     // guaranteed to never conflict with the underlying cache, and it cannot
@@ -1033,11 +1137,12 @@ bool CCoinsViewMemPool::GetCoin(const COutPoint &outpoint, Coin &coin) const {
 
     return base->GetCoin(outpoint, coin) && !coin.IsSpent();
 }
-
+//查看mempool或UTXO中是否有该交易输出
 bool CCoinsViewMemPool::HaveCoin(const COutPoint &outpoint) const {
     return mempool.exists(outpoint) || base->HaveCoin(outpoint);
 }
 
+// 预估当前交易池的内存消耗大小
 size_t CTxMemPool::DynamicMemoryUsage() const {
     LOCK(cs);
     // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no
@@ -1051,6 +1156,8 @@ size_t CTxMemPool::DynamicMemoryUsage() const {
            memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;
 }
 
+// stage(in/out):删除交易的集合； updateDescendants(in):是否更新这些删除交易的后代交易的祖先状态；
+// reason(in):删除的原因
 void CTxMemPool::RemoveStaged(setEntries &stage, bool updateDescendants,
                               MemPoolRemovalReason reason) {
     AssertLockHeld(cs);
@@ -1097,6 +1204,9 @@ void CTxMemPool::UpdateChild(txiter entry, txiter child, bool add) {
     }
 }
 
+// 更新参一的子交易的 父交易相关的信息； 根据参三：是添加还是删除该父交易
+// entry(in) : 将要更新的子交易；  parent(in) : 该子交易的父交易；
+// add(in): TRUE，向该子交易的父交易集合添加它的父交易； false,删除这个父交易
 void CTxMemPool::UpdateParent(txiter entry, txiter parent, bool add) {
     setEntries s;
     if (add && mapLinks[entry].parents.insert(parent).second) {
@@ -1122,30 +1232,39 @@ CTxMemPool::GetMemPoolChildren(txiter entry) const {
     return it->second.children;
 }
 
+// 获取交易池的指定最低费率； 根据传入的交易池的字节限制
 CFeeRate CTxMemPool::GetMinFee(size_t sizelimit) const {
     LOCK(cs);
     if (!blockSinceLastRollingFeeBump || rollingMinimumFeeRate == 0)
         return CFeeRate(Amount(int64_t(rollingMinimumFeeRate)));
 
     int64_t time = GetTime();
+
+    // 每隔最少 10s 才可以去更新一次手续费； 此时可能有一次0手续费
     if (time > lastRollingFeeUpdate + 10) {
-        double halflife = ROLLING_FEE_HALFLIFE;
+        double halflife = ROLLING_FEE_HALFLIFE;     //12小时
+        // 如果当前交易池的消耗 < 指定的1/4; 则更新半周期为 1/4
         if (DynamicMemoryUsage() < sizelimit / 4)
             halflife /= 4;
         else if (DynamicMemoryUsage() < sizelimit / 2)
+        // 如果当前的交易池消耗 < 指定的 1/2;则更新半周期为 1/2
             halflife /= 2;
 
+        // 更新进入矿池的最低手续费率 和 更新手续费的时间
         rollingMinimumFeeRate =
             rollingMinimumFeeRate /
             pow(2.0, (time - lastRollingFeeUpdate) / halflife);
-        lastRollingFeeUpdate = time;
+        lastRollingFeeUpdate = time;        //最后一次更新矿池手续费的时间
 
+        //如果最低的手续费率小于 指定的1/2;则将最低的手续费率赋值为0；返回此时进入矿池的手续费为0.
         if (rollingMinimumFeeRate <
             (double)incrementalRelayFee.GetFeePerK().GetSatoshis() / 2) {
             rollingMinimumFeeRate = 0;
             return CFeeRate(0);
         }
     }
+
+    // 不处于更新状态时，直接返回矿池手续费。
     return std::max(CFeeRate(Amount(int64_t(rollingMinimumFeeRate))),
                     incrementalRelayFee);
 }

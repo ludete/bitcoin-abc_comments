@@ -96,6 +96,8 @@ Amount CTransaction::GetValueOut() const {
     return nValueOut;
 }
 
+//计算交易的优先级；dPriorityInputs(in): 金额*高度差；
+// nTxsize(in):交易的字节大小，可选;
 double CTransaction::ComputePriority(double dPriorityInputs,
                                      unsigned int nTxSize) const {
     nTxSize = CalculateModifiedSize(nTxSize);
@@ -104,6 +106,7 @@ double CTransaction::ComputePriority(double dPriorityInputs,
     return dPriorityInputs / nTxSize;
 }
 
+//当计算交易优先级时，计算修改交易的大小
 unsigned int CTransaction::CalculateModifiedSize(unsigned int nTxSize) const {
     // In order to avoid disincentivizing cleaning up the UTXO set we don't
     // count the constant overhead for each txin and up to 110 bytes of
@@ -111,13 +114,17 @@ unsigned int CTransaction::CalculateModifiedSize(unsigned int nTxSize) const {
     // for priority. Providing any more cleanup incentive than making additional
     // inputs free would risk encouraging people to create junk outputs to
     // redeem later.
+    //1. 获取交易的序列化大小
     if (nTxSize == 0) nTxSize = GetTransactionSize(*this);
+    //2. 遍历所有的交易输入
     for (std::vector<CTxIn>::const_iterator it(vin.begin()); it != vin.end();
          ++it) {
+        //每个交易输入签名默认最大有110给字节，
         unsigned int offset =
             41U + std::min(110U, (unsigned int)it->scriptSig.size());
         if (nTxSize > offset) nTxSize -= offset;
     }
+    //3. 返回剩余的字节大小
     return nTxSize;
 }
 

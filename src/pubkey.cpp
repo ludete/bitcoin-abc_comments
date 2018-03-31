@@ -302,7 +302,7 @@ bool CExtPubKey::Derive(CExtPubKey &out, unsigned int _nChild) const {
 }
 
 /* static */ int ECCVerifyHandle::refcount = 0;
-
+// 如果引用计数为0，就构造一个ECC全局句柄；当再次构造时，检查引用计数，非0，不够造ECC句柄赋值给全局状态
 ECCVerifyHandle::ECCVerifyHandle() {
     if (refcount == 0) {
         assert(secp256k1_context_verify == nullptr);
@@ -313,6 +313,7 @@ ECCVerifyHandle::ECCVerifyHandle() {
     refcount++;
 }
 
+// 如果引用计数为0时，删除ECC全局状态的句柄。 如果引用计数不为0，不删除全局状态的引用，直接退出。
 ECCVerifyHandle::~ECCVerifyHandle() {
     refcount--;
     if (refcount == 0) {

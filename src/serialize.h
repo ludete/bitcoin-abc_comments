@@ -23,7 +23,7 @@
 
 #include "prevector.h"
 
-static const uint64_t MAX_SIZE = 0x02000000;
+static const uint64_t MAX_SIZE = 0x02000000;        //32M
 
 /**
  * Dummy data type to identify deserializing constructors.
@@ -81,7 +81,7 @@ template <typename Stream> inline uint8_t ser_readdata8(Stream &s) {
     s.read((char *)&obj, 1);
     return obj;
 }
-template <typename Stream> inline uint16_t ser_readdata16(Stream &s) {
+template <typename Stream> inline uint16_t aser_readdata16(Stream &s) {
     uint16_t obj;
     s.read((char *)&obj, 2);
     return le16toh(obj);

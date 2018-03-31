@@ -53,10 +53,12 @@ protected:
 };
 
 struct CMainSignals {
-    /** Notifies listeners of updated block chain tip */
+    /** Notifies listeners of updated block chain tip
+     * 通知监听者，更新 区块的Tip
+     * */
     boost::signals2::signal<void(const CBlockIndex *, const CBlockIndex *,
                                  bool fInitialDownload)>
-        UpdatedBlockTip;
+        UpdatedBlockTip;                                                //ok
     /**
      * A posInBlock value for SyncTransaction calls for tranactions not included
      * in connected blocks such as transactions removed from mempool, accepted
@@ -70,6 +72,9 @@ struct CMainSignals {
      * transaction was accepted to mempool, removed from mempool (only when
      * removal was due to conflict from connected block), or appeared in a
      * disconnected block.
+     * 通知监听者更新交易数据。当交易在一个接收的区块中时，需要拿着块的数据来调用这个信号，当交易被mempool
+     * 接收，或者从mempool中移除时，不需要知道块的数据。
+     *
      */
     boost::signals2::signal<void(const CTransaction &,
                                  const CBlockIndex *pindex, int posInBlock)>
@@ -80,15 +85,15 @@ struct CMainSignals {
      */
     boost::signals2::signal<void(const uint256 &)> UpdatedTransaction;
     /** Notifies listeners of a new active block chain. */
-    boost::signals2::signal<void(const CBlockLocator &)> SetBestChain;
+    boost::signals2::signal<void(const CBlockLocator &)> SetBestChain;      //ok
     /** Notifies listeners about an inventory item being seen on the network. */
-    boost::signals2::signal<void(const uint256 &)> Inventory;
+    boost::signals2::signal<void(const uint256 &)> Inventory;               //ok
     /** Tells listeners to broadcast their data. */
     boost::signals2::signal<void(int64_t nBestBlockTime, CConnman *connman)>
-        Broadcast;
+        Broadcast;                                                          //ok
     /** Notifies listeners of a block validation result */
     boost::signals2::signal<void(const CBlock &, const CValidationState &)>
-        BlockChecked;
+        BlockChecked;                                                       //ok
     /** Notifies listeners that a key for mining is required (coinbase) */
     boost::signals2::signal<void(std::shared_ptr<CReserveScript> &)>
         ScriptForMining;
@@ -101,7 +106,7 @@ struct CMainSignals {
      */
     boost::signals2::signal<void(const CBlockIndex *,
                                  const std::shared_ptr<const CBlock> &)>
-        NewPoWValidBlock;
+        NewPoWValidBlock;                                                   //ok
 };
 
 CMainSignals &GetMainSignals();

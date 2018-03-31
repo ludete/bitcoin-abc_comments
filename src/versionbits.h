@@ -28,12 +28,16 @@ enum ThresholdState {
 // A map that gives the state for blocks whose height is a multiple of Period().
 // The map is indexed by the block's parent, however, so all keys in the map
 // will either be nullptr or a block with (height + 1) % Period() == 0.
+//一个map缓存某个高度的块的状态在某个区间。这个map以该区块的父区块作为索引，所以，该map中的所有key
+// 将是null或者(height+1) % Period() == 0 的区块
 typedef std::map<const CBlockIndex *, ThresholdState> ThresholdConditionCache;
 
 struct BIP9DeploymentInfo {
     /** Deployment name */
     const char *name;
-    /** Whether GBT clients can safely ignore this rule in simplified usage */
+    /** Whether GBT clients can safely ignore this rule in simplified usage
+     * 是否客户端可以安全的忽略这个部署
+     * */
     bool gbt_force;
 };
 
@@ -41,7 +45,7 @@ extern const struct BIP9DeploymentInfo VersionBitsDeploymentInfo[];
 
 /**
  * Abstract class that implements BIP9-style threshold logic, and caches
- * results.
+ * results.  抽象类，实现BIP9的阈值逻辑，缓存获取的结果
  */
 class AbstractThresholdConditionChecker {
 protected:
@@ -55,6 +59,7 @@ protected:
 public:
     // Note that the functions below take a pindexPrev as input: they compute
     // information for block B based on its parent.
+    //注意：这个函数依赖于当前区块的父区块来计算该区块的信息。
     ThresholdState GetStateFor(const CBlockIndex *pindexPrev,
                                const Consensus::Params &params,
                                ThresholdConditionCache &cache) const;
@@ -63,6 +68,7 @@ public:
                                ThresholdConditionCache &cache) const;
 };
 
+//内部元素为一个map数组，
 struct VersionBitsCache {
     ThresholdConditionCache caches[Consensus::MAX_VERSION_BITS_DEPLOYMENTS];
 

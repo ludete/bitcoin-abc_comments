@@ -392,7 +392,7 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
 
                     case OP_CHECKLOCKTIMEVERIFY: {
                         if (!(flags & SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY)) {
-                            // not enabled; treat as a NOP2
+                            // not enabled; treat as a NOP2  没有启用该标识；
                             if (flags &
                                 SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS) {
                                 return set_error(
@@ -421,20 +421,22 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
                         // Thus as a special case we tell CScriptNum to accept
                         // up to 5-byte bignums, which are good until 2**39-1,
                         // well beyond the 2**32-1 limit of the nLockTime field
-                        // itself.
+                        // itself.  //将栈顶项的时间转换为 CScriptNum类型
                         const CScriptNum nLockTime(stacktop(-1),
                                                    fRequireMinimal, 5);
 
                         // In the rare event that the argument may be < 0 due to
                         // some arithmetic being done first, you can always use
                         // 0 MAX CHECKLOCKTIMEVERIFY.
+                        // 在一些极少的示例中，由于一些算数运算，该参数可能会 < 0; 所以 此处可以始终使用
+                        // 0 < CHECKLOCKTIMEVERIFY 这种判断方式
                         if (nLockTime < 0) {
                             return set_error(serror,
                                              SCRIPT_ERR_NEGATIVE_LOCKTIME);
                         }
 
                         // Actually compare the specified lock time with the
-                        // transaction.
+                        // transaction.  检查脚本中的锁定时间
                         if (!checker.CheckLockTime(nLockTime)) {
                             return set_error(serror,
                                              SCRIPT_ERR_UNSATISFIED_LOCKTIME);
@@ -1457,15 +1459,19 @@ bool TransactionSignatureChecker::CheckSig(
     return true;
 }
 
+// 检查交易的锁定时间
 bool TransactionSignatureChecker::CheckLockTime(
     const CScriptNum &nLockTime) const {
     // There are two kinds of nLockTime: lock-by-blockheight and
     // lock-by-blocktime, distinguished by whether nLockTime <
     // LOCKTIME_THRESHOLD.
-    //
+    // 这里有两种锁定方式：一种是通过区块高度锁定，一种是通过时间锁定。可以通过 nLockTime < LOCKTIME_THRESHOLD
+    // 来区分这两种方式。
     // We want to compare apples to apples, so fail the script unless the type
     // of nLockTime being tested is the same as the nLockTime in the
     // transaction.
+    // 比较脚本的锁定时间 与交易本身的时间戳是否匹配，都处于同一 区段(即要么都采用高度，要么都采用时间进行锁定)；
+    // 如果二者处于不同的维度，此处直接失败退出
     if (!((txTo->nLockTime < LOCKTIME_THRESHOLD &&
            nLockTime < LOCKTIME_THRESHOLD) ||
           (txTo->nLockTime >= LOCKTIME_THRESHOLD &&
@@ -1475,6 +1481,8 @@ bool TransactionSignatureChecker::CheckLockTime(
 
     // Now that we know we're comparing apples-to-apples, the comparison is a
     // simple numeric one.
+    // 现在比较脚本上的锁定时间 与 交易的时间戳；脚本的锁定时间 大于交易的时间戳，失败。
+    // 即这种情况下，即使该交易被打包，上面的金额也处于不可花费的状态，所以不可以让该交易打包。
     if (nLockTime > int64_t(txTo->nLockTime)) {
         return false;
     }
@@ -1488,6 +1496,10 @@ bool TransactionSignatureChecker::CheckLockTime(
     // Alternatively we could test all inputs, but testing just this input
     // minimizes the data required to prove correct CHECKLOCKTIMEVERIFY
     // execution.
+    // 最后这个脚本锁定时间功能可以被禁用，而且当每个交易的输入都设置对应的nSequence为最大时，
+    // CHECKLOCKTIMEVERIFY的功能可能被绕过，该交易将允许上链，这会使脚本锁定 操作码 CHECKLOCKTIMEVERIFY 无效。
+    // 检测该交易的所有交易输入是否为这种情况来阻止这种情况发生。
+    // 但仅检测指定交易输入，可以最大限度的减少数据量来，并且还可以证明 CHECKLOCKTIMEVERIFY 是否可以启用。
     if (CTxIn::SEQUENCE_FINAL == txTo->vin[nIn].nSequence) {
         return false;
     }
@@ -1545,6 +1557,12 @@ bool TransactionSignatureChecker::CheckSequence(
     return true;
 }
 
+// 验证签名脚本；
+// scriptSig(in):将要被检查的签名脚本(即某个要被检查交易的某个签名)；
+// scriptPubKey(in):签名对应的锁定脚本；
+// flags(in):检查的标识
+// checker(in):检查者
+// serror(out):检查的错误。
 bool VerifyScript(const CScript &scriptSig, const CScript &scriptPubKey,
                   uint32_t flags, const BaseSignatureChecker &checker,
                   ScriptError *serror) {

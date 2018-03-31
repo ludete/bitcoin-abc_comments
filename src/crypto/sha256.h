@@ -12,7 +12,7 @@
 class CSHA256 {
 private:
     uint32_t s[8];
-    uint8_t buf[64];
+    uint8_t buf[64];        //64字节，
     uint64_t bytes;
 
 public:

@@ -20,6 +20,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+///Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/test/txvalidationcache_tests.cpp
 BOOST_AUTO_TEST_SUITE(txvalidationcache_tests)
 
 static bool ToMemPool(CMutableTransaction &tx) {
