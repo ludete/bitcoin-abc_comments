@@ -2051,7 +2051,7 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
                             msgMaker.Make(NetMsgType::HEADERS, vHeaders));
     }
 
-    else if (strCommand == NetMsgType::TX) {
+    else if (strCommand == NetMsgType::TX) {        //标识发送单个消息
         // Stop processing the transaction early if
         // We are in blocks only mode and peer is either not whitelisted or
         // whitelistrelay is off
@@ -2079,7 +2079,7 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
         CValidationState state;
 
         pfrom->setAskFor.erase(inv.hash);
-        mapAlreadyAskedFor.erase(inv.hash);
+        mapAlreadyAskedFor.erase(inv.hash);     //从全局状态中移除这个交易
 
         std::list<CTransactionRef> lRemovedTxn;
 
@@ -2087,6 +2087,7 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
             AcceptToMemoryPool(config, mempool, state, ptx, true,
                                &fMissingInputs, &lRemovedTxn)) {
             mempool.check(pcoinsTip);
+            //中继交易
             RelayTransaction(tx, connman);
             for (size_t i = 0; i < tx.vout.size(); i++) {
                 vWorkQueue.emplace_back(inv.hash, i);
@@ -2162,7 +2163,7 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
                     mempool.check(pcoinsTip);
                 }
             }
-
+            //移除孤儿交易
             for (uint256 hash : vEraseQueue) {
                 EraseOrphanTx(hash);
             }

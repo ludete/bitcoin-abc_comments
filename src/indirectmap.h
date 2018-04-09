@@ -20,6 +20,7 @@ template <class T> struct DereferencingComparator {
  *
  * Objects pointed to by keys must not be modified in any way that changes the
  * result of DereferencingComparator.
+ * keys：是指针类型，但是比较的时候采用他们的解引用后的值
  */
 template <class K, class T> class indirectmap {
 private:

@@ -87,6 +87,8 @@ CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
     if (ret->second.coin.IsSpent()) {
         // The parent only has an empty entry for this outpoint; we can consider
         // our version as fresh.
+        // 如果该UTXO已被花费，就将该UTXO flag设置为FRESH；标识该UTXO要下一轮要从缓存中被删除。
+        // 注意，此处只是从缓存中删除，而不是从数据库中删除。
         ret->second.flags = CCoinsCacheEntry::FRESH;
     }
     //5. 更新内存的使用量
@@ -106,63 +108,82 @@ bool CCoinsViewCache::GetCoin(const COutPoint &outpoint, Coin &coin) const {
 //向UTXO集合中添加coin；outpoint(in):该交易输出；coin(in):该交易输出对应的UTXO。
 void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin coin,
                               bool possible_overwrite) {
+    //1. 将要添加的UTXO一定是未花费的。
     assert(!coin.IsSpent());
-    // 不可花费的交易不加入UTXO集合
+    //2. 且它的脚本一定是可以花费的，才可以添加进UTXO集合中。类似的OP_RETURN这种的烧钱脚本不可以加入UTXO集合中
     if (coin.GetTxOut().scriptPubKey.IsUnspendable()) {
         return;
     }
     CCoinsMap::iterator it;
     bool inserted;
+    //3. 将outpoint先插入 缓存中
     std::tie(it, inserted) =
         cacheCoins.emplace(std::piecewise_construct,
                            std::forward_as_tuple(outpoint), std::tuple<>());
     bool fresh = false;
-    //插入失败
+    //4. 插入失败，
     if (!inserted) {
         cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
     }
-    //非coinbase交易。
+    //5. 非coinbase交易，进入下列条件
     if (!possible_overwrite) {
-        //添加的未裁剪条目的新币。 如果该币未花费
+        //6. 此时 队祖的第二个位置应该是不可以花费的交易，因为上一步只插入了key(即outpoint)，下一步才会将对应的coin插入。
         if (!it->second.coin.IsSpent()) {
             throw std::logic_error(
                 "Adding new coin that replaces non-pruned entry");
         }
+        //7. 此时如果是新的coin，flags = 0；则fresh = true. 如果
         fresh = !(it->second.flags & CCoinsCacheEntry::DIRTY);
     }
+    //8. 将这个coin插入 队组中。
     it->second.coin = std::move(coin);
+    //9. 设置这个coin对应的flag，如果为新币(即UTXO集合中以前灭有的)，它的flag应该是 DIRTY|FRESH。
+    // 如果非新币，它的flag，应该或上 DIRTY。
     it->second.flags |=
         CCoinsCacheEntry::DIRTY | (fresh ? CCoinsCacheEntry::FRESH : 0);
+    //10. 更新UTXO的内存使用量
     cachedCoinsUsage += it->second.coin.DynamicMemoryUsage();
 }
 
-//为当前交易的输出构造UTXO，然后插入UTXO集合中
+//为当前交易的所有输出构造UTXO，然后插入UTXO集合中。
+//cache(in/out): 将要添加的UTXO集合。 tx(in):添加该交易的所有交易输出至参一的UTXO集合中；
+// height(in):该交易被打包进块的高度。
 void AddCoins(CCoinsViewCache &cache, const CTransaction &tx, int nHeight) {
+    //1. 获取交易的标识，以及交易的哈希
     bool fCoinbase = tx.IsCoinBase();
     const uint256 &txid = tx.GetHash();
+    //2. 遍历该交易的所有交易输出，构造该交易的所有outpoint。
     for (size_t i = 0; i < tx.vout.size(); ++i) {
         // Pass fCoinbase as the possible_overwrite flag to AddCoin, in order to
         // correctly deal with the pre-BIP30 occurrances of duplicate coinbase
         // transactions.
+        // 传递coinbase flag去重载addcoin，以便正确处理BIP30中的重复coinbase交易
         cache.AddCoin(COutPoint(txid, i), Coin(tx.vout[i], nHeight, fCoinbase),
                       fCoinbase);
     }
 }
 
 //outpoint(in):引用的交易输出；moveout(out):该引用输出在UTXO集合中的存储币
+//标识该outpoint 所对应的UTXO已被花费。即花费该outpoint所对应的UTXO。
+//moveout(out) : 需要将它返回，作为该交易的undo信息。
 bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin *moveout) {
+    //1. 获取该outpoint在UTXO集合中对应的UTXO。
     CCoinsMap::iterator it = FetchCoin(outpoint);
     if (it == cacheCoins.end()) {
         return false;
     }
+    //2. 然后从UTXO集合中删除这个UTXO，同时将这个UTXO写入coin中。
     cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
     if (moveout) {
         *moveout = std::move(it->second.coin);
     }
+    //3. 如果UTXO的标识位fresh，标识将从缓存中删除这个UTXO。
     if (it->second.flags & CCoinsCacheEntry::FRESH) {
         cacheCoins.erase(it);       //从缓存中删除该交易
     } else {
+        // 如果没有标识fresh，则将这个UTXO的flag设置为dirty，标识被一个交易花费。
         it->second.flags |= CCoinsCacheEntry::DIRTY;
+        // 设置该UTXO已被花费，该UTXO现在存储在缓存中
         it->second.coin.Clear();
     }
     return true;
@@ -361,15 +382,15 @@ double CCoinsViewCache::GetPriority(const CTransaction &tx, int nHeight,
 static const size_t MAX_OUTPUTS_PER_TX =
     MAX_TX_SIZE / ::GetSerializeSize(CTxOut(), SER_NETWORK, PROTOCOL_VERSION);
 
-// 通过交易ID访问UTXO，并返回查找的coin
+// 通过交易ID访问UTXO集合，并返回该交易的最小索引的未花费输出。
 const Coin &AccessByTxid(const CCoinsViewCache &view, const uint256 &txid) {
     COutPoint iter(txid, 0);
 
-    // 引用输出的索引符合规则。
+    // 查询该交易输出
     while (iter.n < MAX_OUTPUTS_PER_TX) {
         // 通过构造的outpoint访问UTXO集合，获取coin
         const Coin &alternate = view.AccessCoin(iter);
-        // 如果UTXO集合中存在该coin，就将它返回
+        // 如果UTXO集合中存在该coin，且coin未被花费，就将它返回
         if (!alternate.IsSpent()) {
             return alternate;
         }

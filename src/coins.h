@@ -32,6 +32,7 @@ class Coin {
 
     //! Whether containing transaction was a coinbase and height at which the
     //! transaction was included into a block.
+    // 是否包含的交易未coinbase交易，并且该交易包含在某个高度的块。
     uint32_t nHeightAndIsCoinBase;
 
 public:
@@ -42,7 +43,7 @@ public:
     Coin(CTxOut outIn, uint32_t nHeightIn, bool IsCoinbase)
         : out(std::move(outIn)),
           nHeightAndIsCoinBase((nHeightIn << 1) | IsCoinbase) {}
-
+    //
     uint32_t GetHeight() const { return nHeightAndIsCoinBase >> 1; }
     bool IsCoinBase() const { return nHeightAndIsCoinBase & 0x01; }
     // 已花费，返回TRUE。
@@ -100,16 +101,17 @@ struct CCoinsCacheEntry {
 
     enum Flags {
         // This cache entry is potentially different from the version in the
-        // parent view. 缓存的条目可能与父交易的视角所看到的不同
+        // parent view. 缓存的条目可能与父视角所看到的版本不同。(父视图:说的是数据库，感觉应该是)
         DIRTY = (1 << 0),
-        // The parent view does not have this entry (or it is pruned). 从父交易的视角来看没有该交易
+        // The parent view does not have this entry (or it is pruned).
+        // 从父视角来看没有该交易
         FRESH = (1 << 1),
         /* Note that FRESH is a performance optimization with which we can erase
            coins that are fully spent if we know we do not need to flush the
            changes to the parent cache. It is always safe to not mark FRESH if
            that condition is not guaranteed. */
-        //注意：FRESH是一个性能优化，如果我们直到不需要刷新变化至缓存中，则依据它可以删除已花费的交易，
-        // 如果不能满足这个条件，那么不标记FRESH是安全的。
+        // 注意：FRESH是一个性能优化，如果知道不需要刷新这个变化到父缓存中(即数据库)，我们就可以
+        // 利用这个优化删除这个完全花费的UTXO。如果不能这个条件，那么不标记fresh是一直安全的。
     };
 
     CCoinsCacheEntry() : flags(0) {}

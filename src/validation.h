@@ -486,6 +486,10 @@ namespace Consensus {
  * Check whether all inputs of this transaction are valid (no double spends and
  * amounts). This does not modify the UTXO set. This does not check scripts and
  * sigs. Preconditions: tx.IsCoinBase() is false.
+ * 检查交易的所有交易输入是有效的(没有双花和金额超支)。此处不修改UTXO集合。此处不检查脚本和签名。
+ *
+ * 注意：前提条件，该方法不能检查coinbase交易，所有的coinbase交易进入该检查，都会返回false。
+ * 即所有要检查的交易不能是coinbase交易，因为coinbase交易没有交易输入。
  */
 bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
                    const CCoinsViewCache &inputs, int nSpendHeight);

@@ -120,6 +120,7 @@ extern const char *GETHEADERS;
 /**
  * The tx message transmits a single transaction.
  * @see https://bitcoin.org/en/developer-reference#tx
+ * 标识发送单个交易
  */
 extern const char *TX;
 /**
@@ -339,7 +340,9 @@ enum GetDataMsg {
     MSG_EXT_BLOCK = MSG_BLOCK | MSG_EXT_FLAG,
 };
 
-/** inv message data */
+/** inv message data
+ * 涉及的信息数据
+ * */
 class CInv {
 public:
     CInv();

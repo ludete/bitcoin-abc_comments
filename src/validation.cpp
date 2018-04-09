@@ -1462,25 +1462,32 @@ static void InvalidBlockFound(CBlockIndex *pindex,
 }
 
 //tx(in):更新到UTXO中的交易； input(in):UTXO集合； txundo(in/out):获取该交易的undo信息(即当前交易花费的UTXO集合)，然后写入文件。
-//nHeight(in):该交易的高度；
+//nHeight(in):该交易被打包的块高度；
 void UpdateCoins(const CTransaction &tx, CCoinsViewCache &inputs,
                  CTxUndo &txundo, int nHeight) {
     // Mark inputs spent. 标识交易输入花费
+    //1. 只有非coinbase交易才有undo信息。undo信息为该交易所花费的UTXO。
     if (!tx.IsCoinBase()) {
         txundo.vprevout.reserve(tx.vin.size());
+        //2. 遍历交易的所有交易输入。
         for (const CTxIn &txin : tx.vin) {
-            txundo.vprevout.emplace_back();
+            txundo.vprevout.emplace_back();     //先向后追加一个空的元素。
+            //3. 花费这个引用的交易输入。
             bool is_spent =
                 inputs.SpendCoin(txin.prevout, &txundo.vprevout.back());
             assert(is_spent);
         }
     }
 
-    // Add outputs. 添加交易输出
+    // Add outputs. 添加交易输出;
+    // 将该交易的交易输出添加进UTXO集合中
     AddCoins(inputs, tx, nHeight);
 }
 
+// tx : 更新到UTXO集合中的交易(即将这笔交易写入UTXO集合)。 input(in/out) : UTXO集合。
+// nHeight : 该交易被打包的块高度
 void UpdateCoins(const CTransaction &tx, CCoinsViewCache &inputs, int nHeight) {
+    // 返回该交易更新到UTXO集合中后，返回的undo信息。
     CTxUndo txundo;
     UpdateCoins(tx, inputs, txundo, nHeight);
 }
@@ -1505,23 +1512,30 @@ int GetSpendHeight(const CCoinsViewCache &inputs) {
 }
 
 namespace Consensus {
-//
+// 依据UTXO，检查该交易的输入金额，输出金额，交易费是否符合共识。并且如果交易输入位coinbase交易，
 bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
                    const CCoinsViewCache &inputs, int nSpendHeight) {
     // This doesn't trigger the DoS code on purpose; if it did, it would make it
     // easier for an attacker to attempt to split the network.
+    //1. 此处不会故意触发DOS攻击。否则，一个攻击者将会很容易分裂网络。
+    // 查看该交易的所有引用输入 是否都存在于本节点的UTXO集合中，只要本交易有一个引用输入不存在于UTXO集合，就直接返回false。
+    // 此处检查完后，标识该交易(非coinbase)所有的引用出入都存在与本节点的UTXO集合中。
     if (!inputs.HaveInputs(tx)) {
         return state.Invalid(false, 0, "", "Inputs unavailable");
     }
 
+    //存储所有的交易输入，(依据UTXO集合，来计算)
     Amount nValueIn = 0;
-    Amount nFees = 0;
+    Amount nFees = 0;       //交易费
+    //依据UTXO集合，获取该交易的所有引用输入金额。
     for (size_t i = 0; i < tx.vin.size(); i++) {
         const COutPoint &prevout = tx.vin[i].prevout;
+        //获取该引用输入在 UTXO集合中的存储信息。
         const Coin &coin = inputs.AccessCoin(prevout);
-        assert(!coin.IsSpent());
+        assert(!coin.IsSpent());        //注意，此处该UTXO必须为未花费。
 
-        // If prev is coinbase, check that it's matured
+        // If prev is coinbase, check that it's matured。
+        //查看引用的输入交易是否为coinbase交易，如果是，就检查该coinbase交易是否为成熟的交易
         if (coin.IsCoinBase()) {
             if (nSpendHeight - coin.GetHeight() < COINBASE_MATURITY) {
                 return state.Invalid(
@@ -1533,6 +1547,7 @@ bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
         }
 
         // Check for negative or overflow input values
+        // 累计所有引用输入的金额，并检查金额的范围。
         nValueIn += coin.GetTxOut().nValue.GetSatoshis();
         if (!MoneyRange(coin.GetTxOut().nValue) || !MoneyRange(nValueIn)) {
             return state.DoS(100, false, REJECT_INVALID,
@@ -1540,6 +1555,7 @@ bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
         }
     }
 
+    //查看交易的输入总金额，与交易的输出总金额是否符合。
     if (nValueIn < tx.GetValueOut()) {
         return state.DoS(
             100, false, REJECT_INVALID, "bad-txns-in-belowout", false,
@@ -1548,6 +1564,7 @@ bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
     }
 
     // Tally transaction fees
+    //检查交易费，不可以为负。
     Amount nTxFee = nValueIn - tx.GetValueOut();
     if (nTxFee < 0) {
         return state.DoS(100, false, REJECT_INVALID, "bad-txns-fee-negative");
@@ -1747,27 +1764,29 @@ bool AbortNode(CValidationState &state, const std::string &strMessage,
 
 /** Restore the UTXO in a Coin at a given COutPoint.
  * 依据给定交易输出重新存储UTXO
- * Out(in):引用交易输出；undo(in):该引用输出对应的锁定脚本；view(in):UTXO视角
+ * Out(in):引用交易输出；undo(in):该引用输出对应的coin, 将这个coin与对应的out重新存储进UTXO集合中。
+ * view(in):UTXO视角；
  * */
 DisconnectResult UndoCoinSpend(const Coin &undo, CCoinsViewCache &view,
                                const COutPoint &out) {
     bool fClean = true;
-    //1. UTXO集合中存在该引用输出。
+    //1. UTXO集合中存在该引用输出，且该引用输出对应的coin并未被花费。
     if (view.HaveCoin(out)) {
-        // Overwriting transaction output.
+        // Overwriting transaction output.      重写交易输出
         fClean = false;
     }
 
     //2. 丢失了undo的原始数据(高度和是否为coinbase)；
+    // 查看该undo coin 的高度是否为
     if (undo.GetHeight() == 0) {
         // Missing undo metadata (height and coinbase). Older versions included
         // this information only in undo records for the last spend of a
         // transactions' outputs. This implies that it must be present for some
         // other output of the same tx.
         // 对于最近花费的一个交易输出，旧版本中的这些信息指挥记录在undo结构中。这意味着它必须存在于相同交易的其他输出中。
-        // 通过交易的哈希访问UTXO集合，获取
+        // 通过交易的哈希访问UTXO集合，获取该交易哈希的最小索引的未花费 coin。
         const Coin &alternate = AccessByTxid(view, out.hash);
-        //如果返回的coin已被花费
+        // 如果返回的coin已被花费，即为查找到该交易ID的coin。
         if (alternate.IsSpent()) {
             // Adding output for transaction without known metadata
             return DISCONNECT_FAILED;
@@ -1819,13 +1838,14 @@ static DisconnectResult DisconnectBlock(const CBlock &block,
     return ApplyBlockUndo(blockUndo, block, pindex, view);
 }
 
-//blockUndo(in):该块的撤销区块；CBlock(in):该块的数据；pindex(in):该块的索引；view(in):当前全局状态的UTXO集合的视角
-//撤销一个区块
+//应用block的 undo信息至UTXO集合中
+//blockUndo(in):该块的撤销区块的undo信息；CBlock(in):该块的数据；pindex(in):该块的索引；view(in):当前全局状态的UTXO集合的视角
+//撤销一个区块；
 DisconnectResult ApplyBlockUndo(const CBlockUndo &blockUndo,
                                 const CBlock &block, const CBlockIndex *pindex,
                                 CCoinsViewCache &view) {
     bool fClean = true;
-    //1. 先检查块的 undo的交易和块的交易数量
+    //1. 先检查块的 undo的交易和块的交易数量；因为coinbase交易没有undo信息，所有块的undo条目比块的交易条目少一个。
     if (blockUndo.vtxundo.size() + 1 != block.vtx.size()) {
         error("DisconnectBlock(): block and undo data inconsistent");
         return DISCONNECT_FAILED;
@@ -1864,18 +1884,19 @@ DisconnectResult ApplyBlockUndo(const CBlockUndo &blockUndo,
             // Skip the coinbase.
             continue;
         }
-        //比较undo交易与长正常交易的数量
+        //比较undo交易与交易交易输入的数量， 这两个应该相等。
         const CTxUndo &txundo = blockUndo.vtxundo[i - 1];
         if (txundo.vprevout.size() != tx.vin.size()) {
             error("DisconnectBlock(): transaction and undo data inconsistent");
             return DISCONNECT_FAILED;
         }
 
-        //
+        //遍历该交易的所有交易输入。
         for (size_t j = tx.vin.size(); j-- > 0;) {
-            // 获取交易的引用输出以及锁定脚本
+            // 获取交易的引用输入 以及 该引用输入对应的 coin 信息。
             const COutPoint &out = tx.vin[j].prevout;
             const Coin &undo = txundo.vprevout[j];
+
             DisconnectResult res = UndoCoinSpend(undo, view, out);
             if (res == DISCONNECT_FAILED) {
                 return DISCONNECT_FAILED;

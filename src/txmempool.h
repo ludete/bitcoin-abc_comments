@@ -557,7 +557,7 @@ private:
     GetSortedDepthAndScore() const;
 
 public:
-    indirectmap<COutPoint, const CTransaction *> mapNextTx;
+    indirectmap<COutPoint, const CTransaction *> mapNextTx;     //存储一个交易花费的引用输出，和它的交易ID。
     std::map<uint256, std::pair<double, Amount>> mapDeltas;
 
     /** Create a new CTxMemPool.

@@ -599,6 +599,7 @@ void CTxMemPool::removeRecursive(const CTransaction &origTx,
     }
 }
 
+//重组链时，对交易池进行修改
 void CTxMemPool::removeForReorg(const CCoinsViewCache *pcoins,
                                 unsigned int nMemPoolHeight, int flags) {
     // 移除交易池中花费未成熟的UTXO的交易，因为块链进行了重组，可能以前成熟的块，现在变得未成熟。
@@ -606,6 +607,8 @@ void CTxMemPool::removeForReorg(const CCoinsViewCache *pcoins,
     // no-longer-final transactions
     LOCK(cs);
     setEntries txToRemove;
+
+    //1. 遍历交易池的所有交易
     for (indexed_transaction_set::const_iterator it = mapTx.begin();
          it != mapTx.end(); it++) {
 
@@ -781,7 +784,8 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
             int64_t parentSizes = 0;
             int64_t parentSigOpCount = 0;
 
-            //遍历交易的 每个交易输入
+            //遍历交易的 每个交易输入；检查该交易的所有交易输入是否在交易池或者UTXO集合中，如果都不在，直接断言出错。
+            //同时，判断每个交易的 状态是否与交易池中的jiao正确
             for (const CTxIn &txin : tx.vin) {
                 // Check that every mempool transaction's inputs refer to available
                 // coins, or other mempool tx's.
@@ -793,7 +797,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
                     const CTransaction &tx2 = it2->GetTx();
                     assert(tx2.vout.size() > txin.prevout.n &&
                            !tx2.vout[txin.prevout.n].IsNull());
-                    fDependsWait = true;
+                    fDependsWait = true;            //存在交易依赖链
 
                     //将这个依赖的交易加入临时集合中，(即:当一个新交易依赖于交易池中的交易时，以它作为父交易，)
                     if (setParentCheck.insert(it2).second) {
@@ -866,41 +870,51 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
             assert(it->GetSizeWithDescendants() >= childSizes + it->GetTxSize());
             //如果这个交易依赖于交易池中的其他交易，将它加入这个集合。
             if (fDependsWait)
+                //进入此处的交易，标识该交易有依赖于其他未花费的交易(即在交易池中的交易)
                 waitingOnDependants.push_back(&(*it));
             else {
-                //检查这个交易的交易输入
+                //进入此处的交易，它的所有交易输入都是直接依赖于UTXO。(即所有依赖的交易都是已经被确定的交易)
                 CValidationState state;
                 bool fCheckResult = tx.IsCoinBase() ||
                                     Consensus::CheckTxInputs(
                                         tx, state, mempoolDuplicate, nSpendHeight);
                 assert(fCheckResult);
+                //更新交易池中的交易至
                 UpdateCoins(tx, mempoolDuplicate, 1000000);
             }
     }
     unsigned int stepsSinceLastRemove = 0;
+    // 遍历所有的依赖于交易池中的 交易
     while (!waitingOnDependants.empty()) {
         const CTxMemPoolEntry *entry = waitingOnDependants.front();
         waitingOnDependants.pop_front();
         CValidationState state;
+        // 如果当前节点的UTXO集合中 没有包含该交易的所有引用输入，就将它继续添加至这个链表中
         if (!mempoolDuplicate.HaveInputs(entry->GetTx())) {
             waitingOnDependants.push_back(entry);
-            stepsSinceLastRemove++;
+            stepsSinceLastRemove++;     //同时这个值继续向后递增
             assert(stepsSinceLastRemove < waitingOnDependants.size());
         } else {
+            // UTXO集合包含该交易的所有 引用输入;
             bool fCheckResult =
                 entry->GetTx().IsCoinBase() ||
                 Consensus::CheckTxInputs(entry->GetTx(), state,
                                          mempoolDuplicate, nSpendHeight);
             assert(fCheckResult);
+            //此时会将这个mempool中的交易，将它的
             UpdateCoins(entry->GetTx(), mempoolDuplicate, 1000000);
             stepsSinceLastRemove = 0;
         }
     }
     for (auto it = mapNextTx.cbegin(); it != mapNextTx.cend(); it++) {
+        // 获取遍历的交易，以及它的ID。
         uint256 txid = it->second->GetId();
+        // 根据ID查询 mempool中存储的条目，即判断该交易是否存储在mempool中。
         indexed_transaction_set::const_iterator it2 = mapTx.find(txid);
+        // 获取查询到的交易。
         const CTransaction &tx = it2->GetTx();
         assert(it2 != mapTx.end());
+        // 判断查询的交易 与 遍历的交易是否为同一个，因为一个交易在交易池中应该只存在一份。
         assert(&tx == it->second);
     }
 
