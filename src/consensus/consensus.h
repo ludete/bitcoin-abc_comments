@@ -39,6 +39,8 @@ enum {
  * given the block size as parameter. It is computed by multiplying
  * MAX_BLOCK_SIGOPS_PER_MB by the size of the block in MB rounded up to the
  * closest integer.
+ * 每M 20000个操作码。
+ * 计算给定参数大小下，每个块可以包含的操作码数量。
  */
 inline uint64_t GetMaxBlockSigOpsCount(uint64_t blockSize) {
     auto nMbRoundedUp = 1 + ((blockSize - 1) / ONE_MEGABYTE);

@@ -284,7 +284,9 @@ private:
     // map of txids to information about that transaction
     std::map<uint256, TxStatsInfo> mapMemPoolTxs;
 
-    /** Classes to track historical data on transaction confirmations */
+    /** Classes to track historical data on transaction confirmations
+     * 跟踪交易确认的历史数据信息
+     * */
     TxConfirmStats feeStats;
 
     unsigned int trackedTxs;

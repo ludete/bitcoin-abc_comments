@@ -37,6 +37,7 @@ inline double AllowFreeThreshold() {
 //允许免费中继该交易
 inline bool AllowFree(double dPriority) {
     // Large (in bytes) low-priority (new, small-coin) transactions need a fee.
+    // 最低的优先级交易费，必须大于该值的交易，才会被打包进块中
     return dPriority > AllowFreeThreshold();
 }
 
@@ -57,6 +58,7 @@ struct LockPoints {
     // containing one of the inputs used in the calculation, then the cached
     // values are still valid even after a reorg.
     // 只要当前的链从这个块高度下降，该高度的块的一个交易 那么缓存的值在块链重组后仍然有效。
+    // 该值标识：当前交易的所有交易输入 中最高的块索引。
     CBlockIndex *maxInputBlock;
 
     LockPoints() : height(0), time(0), maxInputBlock(nullptr) {}
@@ -557,8 +559,8 @@ private:
     GetSortedDepthAndScore() const;
 
 public:
-    indirectmap<COutPoint, const CTransaction *> mapNextTx;     //存储一个交易花费的引用输出，和它的交易ID。
-    std::map<uint256, std::pair<double, Amount>> mapDeltas;
+    indirectmap<COutPoint, const CTransaction *> mapNextTx;     //存储一个交易花费的引用输出，和它的交易。
+    std::map<uint256, std::pair<double, Amount>> mapDeltas;     //key : 交易的哈希；value : Amount 金额；double : 优先级；
 
     /** Create a new CTxMemPool.
      */
@@ -609,7 +611,7 @@ public:
      */
     bool HasNoInputsOf(const CTransaction &tx) const;
 
-    /** Affect CreateNewBlock prioritisation of transactions */
+    /** Affect CreateNewBlock prioritisation of transactions 影响 CreateNewBlock交易的优先级*/
     void PrioritiseTransaction(const uint256 hash, const std::string strHash,
                                double dPriorityDelta, const Amount nFeeDelta);
     void ApplyDeltas(const uint256 hash, double &dPriorityDelta,
@@ -818,11 +820,14 @@ public:
     bool HaveCoin(const COutPoint &outpoint) const;
 };
 
-// We want to sort transactions by coin age priority
+// We want to sort transactions by coin age priority； 通过花费的币的年龄的优先级来排序交易
+// priority = amount * spendHeightDifference;
 typedef std::pair<double, CTxMemPool::txiter> TxCoinAgePriority;
 
+//交易金额优先级 比较
 struct TxCoinAgePriorityCompare {
     bool operator()(const TxCoinAgePriority &a, const TxCoinAgePriority &b) {
+        // 1. 如果两个交易  币的优先级相同，则比较
         if (a.first == b.first) {
             // Reverse order to make sort less than
             return CompareTxMemPoolEntryByScore()(*(b.second), *(a.second));

@@ -298,6 +298,7 @@ bool CCoinsViewCache::Flush() {
     return fOk;
 }
 
+//将 参数中的输出从 缓存中去除。
 void CCoinsViewCache::Uncache(const COutPoint &outpoint) {
     CCoinsMap::iterator it = cacheCoins.find(outpoint);
     if (it != cacheCoins.end() && it->second.flags == 0) {
@@ -310,6 +311,7 @@ unsigned int CCoinsViewCache::GetCacheSize() const {
     return cacheCoins.size();
 }
 
+// 获取交易输入对应的 coin，并返回coin 中对应的锁定脚本。即返回这个交易输入对应的交易输出。
 const CTxOut &CCoinsViewCache::GetOutputFor(const CTxIn &input) const {
     //1.获取交易输入的引用输出对应的coin
     const Coin &coin = AccessCoin(input.prevout);
@@ -353,7 +355,7 @@ bool CCoinsViewCache::HaveInputs(const CTransaction &tx) const {
 }
 
 //获取交易优先级
-//tx(in):获取该交易的优先级； height:交易的父块高度；inChainInputValue(out):交易引用输出的总金额。
+//tx(in):获取该交易的优先级； height:当前主链的高度；inChainInputValue(out):交易引用输出的总金额。
 double CCoinsViewCache::GetPriority(const CTransaction &tx, int nHeight,
                                     Amount &inChainInputValue) const {
     inChainInputValue = Amount(0);
@@ -369,12 +371,13 @@ double CCoinsViewCache::GetPriority(const CTransaction &tx, int nHeight,
         }
         //2. 查看preOut对应的高度是否小于等于 参二(即该引用输出为确认的交易)，
         if (int64_t(coin.GetHeight()) <= nHeight) {
-            // 金额*高度差
+            // 引用输出的金额 * 高度差(币的确认高度与当前主链的高度差)
             dResult += double(coin.GetTxOut().nValue.GetSatoshis()) *
                        (nHeight - coin.GetHeight());
             inChainInputValue += coin.GetTxOut().nValue;
         }
     }
+    //计算交易的优先级； 结合它花费比的高度和金额；与这个值成正比。
     return tx.ComputePriority(dResult);
 }
 

@@ -28,9 +28,10 @@ struct Params;
 
 static const bool DEFAULT_PRINTPRIORITY = false;
 
+// 块模板； 包含块，每个交易的交易费，每个交易的签名数量
 struct CBlockTemplate {
     CBlock block;
-    std::vector<Amount> vTxFees;
+    std::vector<Amount> vTxFees;        //每个交易的交易费
     std::vector<int64_t> vTxSigOpsCount;
 };
 
@@ -73,6 +74,7 @@ struct modifiedentry_iter {
 // This matches the calculation in CompareTxMemPoolEntryByAncestorFee,
 // except operating on CTxMemPoolModifiedEntry.
 // TODO: refactor to avoid duplication of this logic.
+// 比较两个交易的祖先费率，如果两个交易的祖先费率相同，则比较他们的哈希
 struct CompareModifiedEntry {
     bool operator()(const CTxMemPoolModifiedEntry &a,
                     const CTxMemPoolModifiedEntry &b) {
@@ -139,15 +141,16 @@ private:
     CBlock *pblock;
 
     // Configuration parameters for the block size
-    uint64_t nMaxGeneratedBlockSize;
-    CFeeRate blockMinFeeRate;
+    // 块大小的配置参数
+    uint64_t nMaxGeneratedBlockSize;    //最大生成的块大小
+    CFeeRate blockMinFeeRate;           //块的最新费率
 
     // Information on the current status of the block
-    uint64_t nBlockSize;
-    uint64_t nBlockTx;
-    uint64_t nBlockSigOps;
-    Amount nFees;
-    CTxMemPool::setEntries inBlock;
+    uint64_t nBlockSize;        //当前块的大小
+    uint64_t nBlockTx;          //当前块中的交易数量
+    uint64_t nBlockSigOps;      //当前块中交易的签名数量
+    Amount nFees;               //交易费
+    CTxMemPool::setEntries inBlock;// 存在于块中的交易
 
     // Chain context for the block
     int nHeight;
@@ -157,10 +160,11 @@ private:
     const Config *config;
 
     // Variables used for addPriorityTxs
-    int lastFewTxs;
+    int lastFewTxs; //有限价交易的
     bool blockFinished;
 
 public:
+    //
     BlockAssembler(const Config &_config, const CChainParams &chainparams);
     /** Construct a new block template with coinbase to scriptPubKeyIn */
     std::unique_ptr<CBlockTemplate>
@@ -180,7 +184,9 @@ private:
     void addPriorityTxs();
     /** Add transactions based on feerate including unconfirmed ancestors
       * Increments nPackagesSelected / nDescendantsUpdated with corresponding
-      * statistics from the package selection (for logging statistics). */
+      * statistics from the package selection (for logging statistics).
+      * 基于一个交易未确认的祖先交易打包整个交易。
+      * */
     void addPackageTxs(int &nPackagesSelected, int &nDescendantsUpdated);
 
     // helper function for addPriorityTxs
@@ -192,7 +198,9 @@ private:
     // helper functions for addPackageTxs()
     /** Remove confirmed (inBlock) entries from given set */
     void onlyUnconfirmed(CTxMemPool::setEntries &testSet);
-    /** Test if a new package would "fit" in the block */
+    /** Test if a new package would "fit" in the block
+     * 测试一个新的软件包是否适合 该块。
+     * */
     bool TestPackage(uint64_t packageSize, int64_t packageSigOpsCost);
     /** Perform checks on each transaction in a package:
       * locktime, serialized size (if necessary)
@@ -210,7 +218,9 @@ private:
                       std::vector<CTxMemPool::txiter> &sortedEntries);
     /** Add descendants of given transactions to mapModifiedTx with ancestor
       * state updated assuming given transactions are inBlock. Returns number
-      * of updated descendants. */
+      * of updated descendants.
+      * 返回更新后代交易的数量。
+      * */
     int UpdatePackagesForAdded(const CTxMemPool::setEntries &alreadyAdded,
                                indexed_modified_transaction_set &mapModifiedTx);
 };

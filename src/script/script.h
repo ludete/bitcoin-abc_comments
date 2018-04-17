@@ -24,7 +24,7 @@ static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 520;
 // Maximum number of non-push operations per script
 static const int MAX_OPS_PER_SCRIPT = 201;
 
-// Maximum number of public keys per multisig
+// Maximum number of public keys per multisig； 每个多签名中最大的公钥数量。
 static const int MAX_PUBKEYS_PER_MULTISIG = 20;
 
 // Maximum script length in bytes
@@ -477,9 +477,12 @@ public:
         return fRet;
     }
 
+    // 获取脚本操作码。pc(in/out)：脚本迭代器；
+    // opcodeRet(out): 获取的操作码
     bool GetOp(iterator &pc, opcodetype &opcodeRet) {
         const_iterator pc2 = pc;
         bool fRet = GetOp2(pc2, opcodeRet, nullptr);
+        // 将迭代器向后移动至指定的位置。
         pc = begin() + (pc2 - begin());
         return fRet;
     }
@@ -493,17 +496,21 @@ public:
         return GetOp2(pc, opcodeRet, nullptr);
     }
 
+    //pc(in/out): 脚本迭代器；     opcodeRet(out): 获取的操作码
+    //pvchRet(out) : 返回操作码操作的数据，因为如果是push操作码，它会有操作数据。
     bool GetOp2(const_iterator &pc, opcodetype &opcodeRet,
                 std::vector<uint8_t> *pvchRet) const {
+        //1. 进行数据的初始化，并对迭代器进行检查
         opcodeRet = OP_INVALIDOPCODE;
         if (pvchRet) pvchRet->clear();
         if (pc >= end()) return false;
 
-        // Read instruction
+        // Read instruction； 读取指令
         if (end() - pc < 1) return false;
         unsigned int opcode = *pc++;
 
-        // Immediate operand
+        // Immediate operand；
+        // 根据指令，进行剩余数据的操作。
         if (opcode <= OP_PUSHDATA4) {
             unsigned int nSize = 0;
             if (opcode < OP_PUSHDATA1) {
@@ -522,6 +529,7 @@ public:
             }
             if (end() - pc < 0 || (unsigned int)(end() - pc) < nSize)
                 return false;
+            // 获取操作码操作的数据，并将迭代器向后移动。
             if (pvchRet) pvchRet->assign(pc, pc + nSize);
             pc += nSize;
         }

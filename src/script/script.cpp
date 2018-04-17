@@ -262,35 +262,51 @@ const char *GetOpName(opcodetype opcode) {
     }
 }
 
+//获取脚本中的签名操作码数量。
+//fAccurate(in): false 计算非P2SH的下的签名操作码数量。 true 计算所有脚本格式的签名操作码数量
 unsigned int CScript::GetSigOpCount(bool fAccurate) const {
     unsigned int n = 0;
+    //1. 脚本的初始迭代器
     const_iterator pc = begin();
     opcodetype lastOpcode = OP_INVALIDOPCODE;
+
+    //2. 遍历整个脚本
     while (pc < end()) {
         opcodetype opcode;
+
+        //3. 依次获取脚本中的操作码
         if (!GetOp(pc, opcode)) break;
+
+        //4. 从脚本中获取到的操作码为 OP_CHECKSIG 或 OP_CHECKSIGVERIFY，总量递增+1.
         if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY)
             n++;
         else if (opcode == OP_CHECKMULTISIG ||
                  opcode == OP_CHECKMULTISIGVERIFY) {
+        // 从脚本中取到的操作码为 OP_CHECKMULTISIG 或 OP_CHECKMULTISIGVERIFY； 标识该脚本为P2SH 脚本，
+            //依据参数；是否需要精确计算 脚本中签名操作码的个数，
             if (fAccurate && lastOpcode >= OP_1 && lastOpcode <= OP_16)
                 n += DecodeOP_N(lastOpcode);
             else
+                // 不需要精确计算P2SH 的签名操作码数量。
                 n += MAX_PUBKEYS_PER_MULTISIG;
         }
+        // 获取的操作码为其它内容，则更新最后一个操作码。
         lastOpcode = opcode;
     }
     return n;
 }
 
 unsigned int CScript::GetSigOpCount(const CScript &scriptSig) const {
+    //1. 非P2SH交易
     if (!IsPayToScriptHash()) return GetSigOpCount(true);
 
     // This is a pay-to-script-hash scriptPubKey;
     // get the last item that the scriptSig
     // pushes onto the stack:
+    // 获取 scriptSig 脚本 push到栈上的最后一项。
     const_iterator pc = scriptSig.begin();
     std::vector<uint8_t> data;
+    //
     while (pc < scriptSig.end()) {
         opcodetype opcode;
         if (!scriptSig.GetOp(pc, opcode, data)) return 0;
@@ -317,7 +333,7 @@ bool CScript::IsCommitment(const std::vector<uint8_t> &data) const {
     // To ensure we have an immediate push, we limit the commitment size to 64
     // bytes. In addition to the data themselves, we have 2 extra bytes:
     // OP_RETURN and the push opcode itself. 为了保证立即打包交易，限制commitment最大64字节。
-    //除了数据本身，还有两个额外的字节，OP_RETURN 和 push操作码
+    //除了数据本身，还有两个额外的字节，OP_RETURN 和 数据长度
     if (data.size() > 64 || this->size() != data.size() + 2) {
         return false;
     }

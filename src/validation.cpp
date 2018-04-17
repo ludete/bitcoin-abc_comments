@@ -242,19 +242,24 @@ static void FindFilesToPruneManual(std::set<int> &setFilesToPrune,
 static uint32_t GetBlockScriptFlags(const CBlockIndex *pindex,
                                     const Config &config);
 
+//检查是否为可以打包的交易；
+// nBlockHeight(in): 当前主链的要挖的区块高度; nBlockTime(in): 标识当前主链区块的最新打包时间。
 static bool IsFinalTx(const CTransaction &tx, int nBlockHeight,
                       int64_t nBlockTime) {
+    //1. 交易时间戳等于0， 标识该交易可以立即打包
     if (tx.nLockTime == 0) {
         return true;
     }
 
     int64_t lockTime = tx.nLockTime;
+    //2. 获取该交易时间戳字段，最终标识的含义，高度/时间。交易小于参数限制，标识可以立即打包。
     int64_t lockTimeLimit =
         (lockTime < LOCKTIME_THRESHOLD) ? nBlockHeight : nBlockTime;
     if (lockTime < lockTimeLimit) {
         return true;
     }
 
+    //3. 时间戳不为0， 但是如果交易输入的所有sequence字段都为最大值，这个交易也可以立即打包。
     for (const auto &txin : tx.vin) {
         if (txin.nSequence != CTxIn::SEQUENCE_FINAL) {
             return false;
@@ -271,12 +276,14 @@ static bool IsFinalTx(const CTransaction &tx, int nBlockHeight,
  * tx(in):检查的交易； flags(in):交易检查的标识； prevHeights(in/out):这个交易的所有引用输出所在的高度, 当这个
  * 交易输入的sequence字段不表示相对锁定时间时，将指定的交易输入的高度设为0。
  * block(in):这个交易将在这个块中被打包(假设)。
+ * 计算传入的交易 被打包时需要到达的 时间，高度。(因为一个交易可以有多个交易输入，每个交易输入含有不同的锁定条件，高度/时间)
  */
 static std::pair<int, int64_t>
 CalculateSequenceLocks(const CTransaction &tx, int flags,
                        std::vector<int> *prevHeights,
                        const CBlockIndex &block) {
 
+    //1. 必须与交易输入的数量相同。
     assert(prevHeights->size() == tx.vin.size());
 
     // Will be set to the equivalent height- and time-based nLockTime
@@ -290,12 +297,13 @@ CalculateSequenceLocks(const CTransaction &tx, int flags,
     // tx.nVersion is signed integer so requires cast to unsigned otherwise
     // we would be doing a signed comparison and half the range of nVersion
     // wouldn't support BIP 68.
-    // 判断该交易是否支持 BIP68
+    // 判断该交易是否支持 BIP68； 版本2 号以后的交易，且flag设置了LOCKTIME_VERIFY_SEQUENCE 都支持BIP68。
     bool fEnforceBIP68 = static_cast<uint32_t>(tx.nVersion) >= 2 &&(
                          flags & LOCKTIME_VERIFY_SEQUENCE != 0);
 
     // Do not enforce sequence numbers as a relative lock time
-    // unless we have been instructed to; 不支持BIP68，
+    // unless we have been instructed to;
+    // 不支持BIP68，直接返回-1.
     if (!fEnforceBIP68) {
         return std::make_pair(nMinHeight, nMinTime);
     }
@@ -308,19 +316,20 @@ CalculateSequenceLocks(const CTransaction &tx, int flags,
         // treated as relative lock-times, nor are they given any
         // consensus-enforced meaning at this point.
         // 如果交易输入的sequence字段 设置了SEQUENCE_LOCKTIME_DISABLE_FLAG，
-        // 标识这个字段将不做为这个交易输入的对应的锁定时间(详细信息：查看BIP68)
+        // 标识这个字段将标识时间戳含义(详细信息：查看BIP68)，所以此处直接返回。
         if (txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) {
             // The height of this input is not relevant for sequence locks
+            // 同时，该交易输入所对应的高度设置为0，标识这个输入可以立即被花费。
             (*prevHeights)[txinIndex] = 0;
             continue;
         }
 
-        //获取这个交易输入的高度
+        //获取这个交易输入的高度；
         int nCoinHeight = (*prevHeights)[txinIndex];
+        // 这个flag被设置，标识sequence字段是以时间，或高度进行锁定的。
+        // 即这个交易需要到指定时间 或 块后，才可以被打包。
         if (txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG) {
-            //这个flag被设置，标识sequence字段是以时间进行锁定的。
-
-            //以假设的打包这个交易的块为基点，查找引用交易输入的父交易的中值时间。
+            //查找引用交易的 父块高度的中位数时间。
             int64_t nCoinTime = block.GetAncestor(std::max(nCoinHeight - 1, 0))
                                     ->GetMedianTimePast();
             // NOTE: Subtract 1 to maintain nLockTime semantics.
@@ -339,20 +348,20 @@ CalculateSequenceLocks(const CTransaction &tx, int flags,
                 nMinTime,
                 nCoinTime +
                     (int64_t)((txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_MASK)
-                              << CTxIn::SEQUENCE_LOCKTIME_GRANULARITY) -
-                    1);
+                              << CTxIn::SEQUENCE_LOCKTIME_GRANULARITY) -  1);   //获取锁定的时间
         } else {
             //标识sequence字段是以高度作为锁定的
             nMinHeight = std::max(
                 nMinHeight,
                 nCoinHeight +
-                    (int)(txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_MASK) - 1);
+                    (int)(txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_MASK) - 1); //获取锁定的高度
         }
     }
 
-    //返回求得的该交易的所有的交易输入中最迟的可以花费的时间 和 高度(即什么时候这个交易的所有输入 才都可以花费，这个交易此时才可以打包进区块)
-    //因为一个交易可能含有多个交易输入， 每个交易输入可能采用了不同的锁定方式(时间和高度)，所以返回这个交易中 此2者的最大值。只要最大值检查通过后，
-    //就表示这个交易都可以被打包了。
+    // 返回求得的该交易的所有的交易输入中最迟的可以花费的时间 或 高度。
+    // (即什么时候这个交易此时才可以打包进区块) 因为一个交易可能含有多个交易输入，
+    // 每个交易输入可能采用了不同的锁定方式(时间和高度)，所以返回这个交易中所有交易输入 标识的锁定最大值。
+    // 只有最大值检查通过后(高度和时间)，就表示这个交易都可以被打包了。
     return std::make_pair(nMinHeight, nMinTime);
 }
 
@@ -360,8 +369,9 @@ CalculateSequenceLocks(const CTransaction &tx, int flags,
 static bool EvaluateSequenceLocks(const CBlockIndex &block,
                                   std::pair<int, int64_t> lockPair) {
     assert(block.pprev);
-    //获取这个交易的中值时间，比较
+    // 获取这个块父区块的中值时间
     int64_t nBlockTime = block.pprev->GetMedianTimePast();
+    // 判断这个交易的锁定时间点是否可以在这个块中被打包。
     if (lockPair.first >= block.nHeight || lockPair.second >= nBlockTime)
         return false;
 
@@ -381,6 +391,8 @@ bool TestLockPointValidity(const LockPoints *lp) {
     // If there are no relative lock times, the LockPoints don't depend on the
     // chain
     // 如果有相对锁定时间，并且maxInputBlock 含有数据；如果每天相对锁定时间，LockPoints 不依赖于当前的块链。
+    // 这块主要检查：一个交易条目的锁定点中，最大交易输入索引字段，查看该交易输入是否还在主链中，如果不在，
+    // 标识该交易已经无效，因为它的输入已经被重组删除，返回false。
     if (lp->maxInputBlock) {
         // Check whether chainActive is an extension of the block at which the
         // LockPoints
@@ -405,7 +417,7 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints *lp,
 
     //1. 获取当前链的高度；
     CBlockIndex *tip = chainActive.Tip();
-    // 创建当前链的下一个块的索引；并设置它的属性；父索引和高度
+    // 创建当前链的下一个块的索引；并设置它的属性；父索引和高度; 假设当前交易会在这个区块中被打包
     CBlockIndex index;
     index.pprev = tip;
     // CheckSequenceLocks() uses chainActive.Height()+1 to evaluate height based
@@ -415,8 +427,9 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints *lp,
     // more than chainActive.Height()
     index.nHeight = tip->nHeight + 1;
 
+
     std::pair<int, int64_t> lockPair;
-    //2. 如果参三已含有数据
+    //2. 如果参三已含有数据，为true; 默认false，即参三无数据。
     if (useExistingLockPoints) {
         assert(lp);
         lockPair.first = lp->height;
@@ -449,7 +462,7 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints *lp,
                 prevheights[txinIndex] = coin.GetHeight();
             }
         }
-        // 计算 该交易的锁定时间戳
+        // 计算 该交易的锁定时间戳(包含高度和时间)
         lockPair = CalculateSequenceLocks(tx, flags, &prevheights, index);
         if (lp) {
             lp->height = lockPair.first;
@@ -477,25 +490,33 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints *lp,
                     maxInputHeight = std::max(maxInputHeight, height);
                 }
             }
-            // 获取该交易的最大的交易输入 块索引。
+            // 获取该交易的最大交易输入 块索引。
             lp->maxInputBlock = tip->GetAncestor(maxInputHeight);
         }
     }
-    // 执行
+    // 执行获取该交易的时间戳。看该交易是否可以被打包。
     return EvaluateSequenceLocks(index, lockPair);
 }
 
+//获取交易的签名操作码个数。(不携带P2SH 功能)；当脚本为P2SH时，默认使用最大的脚本操作码数量
 uint64_t GetSigOpCountWithoutP2SH(const CTransaction &tx) {
     uint64_t nSigOps = 0;
+    //1. 遍历所有的交易输入，累计它的所有签名操作码数量了；
+    // 当为P2SH 脚本时，交易输入的脚本会包含签名操作码。
     for (const auto &txin : tx.vin) {
         nSigOps += txin.scriptSig.GetSigOpCount(false);
     }
+
+    //2. 遍历所有的交易输出，累计它的所有签名操作码数量。
+    // 当为P2PKH 脚本时，交易输出的锁定脚本会包含签名操作码。
     for (const auto &txout : tx.vout) {
         nSigOps += txout.scriptPubKey.GetSigOpCount(false);
     }
     return nSigOps;
 }
 
+// 获取P2SH操作码的数量；
+// inputs(in): UTXO集合。
 uint64_t GetP2SHSigOpCount(const CTransaction &tx,
                            const CCoinsViewCache &inputs) {
     if (tx.IsCoinBase()) {
@@ -503,6 +524,7 @@ uint64_t GetP2SHSigOpCount(const CTransaction &tx,
     }
 
     uint64_t nSigOps = 0;
+    // 获取这些交易输入所对应的 锁定脚本。
     for (auto &i : tx.vin) {
         const CTxOut &prevout = inputs.GetOutputFor(i);
         if (prevout.scriptPubKey.IsPayToScriptHash()) {
@@ -512,13 +534,17 @@ uint64_t GetP2SHSigOpCount(const CTransaction &tx,
     return nSigOps;
 }
 
+//获取脚本操作码数量
 uint64_t GetTransactionSigOpCount(const CTransaction &tx,
                                   const CCoinsViewCache &inputs, int flags) {
+    //1. 获取不精确P2SH情况下脚本操作码的数量。
     uint64_t nSigOps = GetSigOpCountWithoutP2SH(tx);
+    //2. 如果交易未coinbase交易，则直接返回
     if (tx.IsCoinBase()) {
         return nSigOps;
     }
 
+    // 如果交易未P2SH脚本，则继续累加 P2SH 操作码的数量
     if (flags & SCRIPT_VERIFY_P2SH) {
         nSigOps += GetP2SHSigOpCount(tx, inputs);
     }
@@ -624,6 +650,7 @@ bool CheckRegularTransaction(const CTransaction &tx, CValidationState &state,
     return true;
 }
 
+//限制交易池的大小，通过 时间 和 交易池大小 来限制。
 void LimitMempoolSize(CTxMemPool &pool, size_t limit, unsigned long age) {
     int expired = pool.Expire(GetTime() - age);
     if (expired != 0) {
@@ -719,11 +746,13 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction &tx,
         }
 
         const CTransactionRef &txFrom = pool.get(txin.prevout.hash);
+        //如果该交易存在于交易池中
         if (txFrom) {
             assert(txFrom->GetHash() == txin.prevout.hash);
             assert(txFrom->vout.size() > txin.prevout.n);
             assert(txFrom->vout[txin.prevout.n] == coin.GetTxOut());
         } else {
+        //交易存在于
             const Coin &coinFromDisk = pcoinsTip->AccessCoin(txin.prevout);
             assert(!coinFromDisk.IsSpent());
             assert(coinFromDisk.GetTxOut() == coin.GetTxOut());
@@ -812,19 +841,19 @@ static bool AcceptToMemoryPoolWorker(
         LockPoints lp;
         {
             LOCK(pool.cs);
-            //使用 UTXO和mempool 的全局状态构建一个查找器;作为UTXO的后端；
+            //使用 UTXO集合 和mempool 的全局状态构建一个查找器;作为UTXO的后端；
             CCoinsViewMemPool viewMemPool(pcoinsTip, pool);
             // 将这个变量设为 view的后端，此时，直接后端链接到数据库
             view.SetBackend(viewMemPool);
             //6. 查看该交易是否已被确认 或 已进入交易池
-            // Do we already have it? 查找UTXO集合是否已存在该交易；存在，标识该交易已被确认，不需要再次进入交易池。
+            // Do we already have it? 查找UTXO集合 或 mempool中 是否已存在该交易；存在，标识不需要再次进入交易池。
             for (size_t out = 0; out < tx.vout.size(); out++) {
                 //1. 构建以该交易作为输出的 preout.
                 COutPoint outpoint(txid, out);
 
                 //查看该交易的输出是否已在 UTXO集合中，
                 bool had_coin_in_cache = pcoinsTip->HaveCoinInCache(outpoint);      //查看UTXO缓存集合中是否存在该UTXO
-                // 查看该交易的某个输出 是否已存在UTXO或交易池中。存在，进入下列条件
+                // 查看该交易的某个输出 是否已存在UTXO集合 或 交易池中。存在，进入下列条件， 标识该交易已经在 mempool 或UTXO集合，不需要继续进mempool了。
                 if (view.HaveCoin(outpoint)) {
                     // 不存在与UTXO集合中，存在于交易池中
                     if (!had_coin_in_cache) {
@@ -839,9 +868,10 @@ static bool AcceptToMemoryPoolWorker(
 
             // 运行到此处：标识该交易既没有在UTXO中(属于未确认的交易)，也不在交易池中;(此时可以确定：该交易属于新交易)
             // Do all inputs exist?； 查看该交易的交易输入在 UTXO集合中是否都存在
-            //7. 查看该交易的引用输出是否都存在；即它花费的UTXO是否合理
+            //7. 查看该交易的所有引用输出是否都存在；即它花费的UTXO是否合理；
+            // 当交易池以及 UTXO集合中 都没有该交易的引用输入时，标识该交易丢失交易输入，不允许加入到交易池。
             for (const CTxIn txin : tx.vin) {
-                //1. 它的引用输出不存在与UTXO集合中，将它添加到 传出变量中
+                //1. 它的引用输出不存在与UTXO集合的缓存中中，将它添加到 传出变量中
                 if (!pcoinsTip->HaveCoinInCache(txin.prevout)) {
                     coins_to_uncache.push_back(txin.prevout);
                 }
@@ -1137,7 +1167,7 @@ static bool AcceptToMemoryPoolWithTime(
         config, pool, state, tx, fLimitFree, pfMissingInputs, nAcceptTime,
         plTxnReplaced, fOverrideMempoolLimit, nAbsurdFee, coins_to_uncache);
     if (!res) {
-        // 如果添加失败，可能该交易已在交易池中；将该交易中的花费的UTXO，从UTXO集合的缓存中删除；
+        // 如果添加失败，将该交易已在交易池中；将该交易中的花费的UTXO，从UTXO集合的缓存中删除；
         for (const COutPoint &outpoint : coins_to_uncache) {
             pcoinsTip->Uncache(outpoint);
         }
@@ -1298,14 +1328,19 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex,
     return true;
 }
 
+//根据规则，计算 每个块的分发金额
 Amount GetBlockSubsidy(int nHeight, const Consensus::Params &consensusParams) {
+    //1. 依据当前高度，计算金额的半衰期。(主链：每210000块是一次半衰期)
     int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
     // Force block reward to zero when right shift is undefined.
+    //2. 如果半衰期大于等于64，分发金额为0.
     if (halvings >= 64) return 0;
 
+    //3. 初始的金额分发值为50个比特币
     Amount nSubsidy = 50 * COIN;
     // Subsidy is cut in half every 210,000 blocks which will occur
     // approximately every 4 years.
+    //4. 将分发金额根据半衰期进行移动
     return Amount(nSubsidy.GetSatoshis() >> halvings);
 }
 
@@ -3618,6 +3653,7 @@ bool CheckBlock(const Config &config, const CBlock &block,
     }
 
     // And a valid coinbase.
+    // 验证coinbase交易的有效性
     if (!CheckCoinbase(*block.vtx[0], state, false)) {
         return state.Invalid(false, state.GetRejectCode(),
                              state.GetRejectReason(),
@@ -3702,6 +3738,7 @@ static bool CheckIndexAgainstCheckpoint(const CBlockIndex *pindexPrev,
 
 // 区块头的上下文检查； 1. 检查工作量，2.检查块的时间，3.检查块的版本(依据父区块检查该块头的状态，父区块此时可以在全局变量中找到)
 // block(in):检查的块； state(out):检查的状态；pindexPrev(in):检查块的父区块； nAdjustedTime(in):时间,当前的系统时间+用户自定义的偏移时间
+// 此处也会用来检查  要块模板，所以不需要检查块中的交易
 bool ContextualCheckBlockHeader(const CBlockHeader &block,
                                 CValidationState &state,
                                 const Consensus::Params &consensusParams,
@@ -3743,7 +3780,8 @@ bool ContextualCheckBlockHeader(const CBlockHeader &block,
     return true;
 }
 
-//检查交易； tx(in):检查的交易； state(out):检查的状态；nHeight(in):该交易所在块高度；
+//检查交易；1. 是否为成熟交易。2.是否没有采用重放攻击保护。
+// tx(in):检查的交易； state(out):检查的状态；nHeight(in):该交易所在块高度；
 //nLockTimeCutoff(in):该交易所在的块的时间；
 bool ContextualCheckTransaction(const Config &config, const CTransaction &tx,
                                 CValidationState &state,
@@ -3760,6 +3798,7 @@ bool ContextualCheckTransaction(const Config &config, const CTransaction &tx,
     if (IsUAHFenabled(config, nHeight) &&
         nHeight <= consensusParams.antiReplayOpReturnSunsetHeight) {
         for (const CTxOut &o : tx.vout) {
+            //且如果交易输脚本出中含有 antiReplayOpReturnCommitment字段，标识该交易为无重放攻击的，此时应该报错。
             if (o.scriptPubKey.IsCommitment(
                     consensusParams.antiReplayOpReturnCommitment)) {
                 return state.DoS(10, false, REJECT_INVALID, "bad-txn-replay",
@@ -3771,7 +3810,7 @@ bool ContextualCheckTransaction(const Config &config, const CTransaction &tx,
     return true;
 }
 
-//依据当前区块的上下文环境下进行交易 检查；查看是否为final交易(既可以打包)，是否符合UAHF规则的交易
+//依据当前主链的上下文环境下进行交易 检查；查看是否为final交易(既可以打包)，是否符合UAHF规则的交易
 //tx(in):检查的交易；state(out):检查的状态
 bool ContextualCheckTransactionForCurrentBlock(
     const Config &config, const CTransaction &tx, CValidationState &state,
@@ -4140,12 +4179,15 @@ bool ProcessNewBlock(const Config &config,
     return true;
 }
 
+//基于当前主链的最高块，测试一个块的有效性。
+//1.
 bool TestBlockValidity(const Config &config, CValidationState &state,
                        const CChainParams &chainparams, const CBlock &block,
                        CBlockIndex *pindexPrev, bool fCheckPOW,
                        bool fCheckMerkleRoot) {
     AssertLockHeld(cs_main);
     assert(pindexPrev && pindexPrev == chainActive.Tip());
+    //1. 检查一个块是否在检查点之间进行分叉(默认设置，这些检查点之前的块都为稳定的不可更改的块)
     if (fCheckpointsEnabled &&
         !CheckIndexAgainstCheckpoint(pindexPrev, state, chainparams,
                                      block.GetHash())) {
@@ -4159,11 +4201,13 @@ bool TestBlockValidity(const Config &config, CValidationState &state,
     indexDummy.nHeight = pindexPrev->nHeight + 1;
 
     // NOTE: CheckBlockHeader is called by CheckBlock
+    //2. 块头的上下文检查
     if (!ContextualCheckBlockHeader(block, state, chainparams.GetConsensus(),
                                     pindexPrev, GetAdjustedTime())) {
         return error("%s: Consensus::ContextualCheckBlockHeader: %s", __func__,
                      FormatStateMessage(state));
     }
+    //3. 检查块
     if (!CheckBlock(config, block, state, chainparams.GetConsensus(), fCheckPOW,
                     fCheckMerkleRoot)) {
         return error("%s: Consensus::CheckBlock: %s", __func__,

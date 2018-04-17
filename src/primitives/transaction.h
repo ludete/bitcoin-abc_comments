@@ -72,7 +72,10 @@ public:
 
     /* Below flags apply in the context of BIP 68*/
     /* If this flag set, CTxIn::nSequence is NOT interpreted as a
-     * relative lock-time. */
+     * relative lock-time.
+     * 下面的flag应用在BIP68 中。如果哲哥flag被设置，交易输入的sequence字段不
+     * 标识为相对的时间戳。
+     * */
     static const uint32_t SEQUENCE_LOCKTIME_DISABLE_FLAG = (1 << 31);
 
     /* If CTxIn::nSequence encodes a relative lock-time and this flag

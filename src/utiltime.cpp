@@ -14,7 +14,7 @@
 #include <boost/thread.hpp>
 
 //!< For unit testing
-static int64_t nMockTime = 0;
+static int64_t nMockTime = 0;       //如果这个值被设置，它将会用来表示以后交易进入交易池的时间。
 
 int64_t GetTime() {
     if (nMockTime) return nMockTime;
