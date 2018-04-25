@@ -10,6 +10,7 @@
 
 /**
  * STL-like map container that only keeps the N elements with the highest value.
+ * 类似于STL的map容器，但是只保留最高值较大的N个元素
  */
 template <typename K, typename V> class limitedmap {
 public:
@@ -24,7 +25,7 @@ protected:
     typedef typename std::map<K, V>::iterator iterator;
     std::multimap<V, iterator> rmap;
     typedef typename std::multimap<V, iterator>::iterator rmap_iterator;
-    size_type nMaxSize;
+    size_type nMaxSize;     //这个map中存在的元素数量
 
 public:
     limitedmap(size_type nMaxSizeIn) {

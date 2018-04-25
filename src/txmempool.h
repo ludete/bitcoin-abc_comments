@@ -642,6 +642,8 @@ public:
      * child transactions present in hashesToUpdate, which are already accounted
      * for).  Note: hashesToUpdate should be the set of transactions from the
      * disconnected block that have been accepted back into the mempool.
+     * 当把一个拒绝的块中的交易添加回mempool时，mempool中可能存在这些交易的子交易。
+     *
      */
     void
     UpdateTransactionsFromBlock(const std::vector<uint256> &hashesToUpdate);
@@ -657,6 +659,7 @@ public:
      * fSearchForParents = whether to search a tx's vin for in-mempool parents,
      * or look up parents from mapLinks. Must be true for entries not in the
      * mempool
+     * 计算交易池中关于一个交易的所有祖先。注意：此时参数二作为传出参数，不包含当前传入的交易。与CalculateDescendants 相反。
      */
     bool CalculateMemPoolAncestors(
         const CTxMemPoolEntry &entry, setEntries &setAncestors,
@@ -667,7 +670,9 @@ public:
     /**
      * Populate setDescendants with all in-mempool descendants of hash.
      * Assumes that setDescendants includes all in-mempool descendants of
-     * anything already in it.  */
+     * anything already in it.
+     * 计算交易池中关于一个交易的所有后代交易。注意：此时参数二作为传出参数，包含当前传入的交易。与CalculateMemPoolAncestors 相反。
+     * */
     void CalculateDescendants(txiter it, setEntries &setDescendants);
 
     /**
@@ -685,15 +690,16 @@ public:
      * sizelimit. pvNoSpendsRemaining, if set, will be populated with the list
      * of outpoints which are not in mempool which no longer have any spends in
      * this mempool.
-     * 从交易池中移除交易，直到交易池的内存小号达到指定大小。如果参二不为空，填充不再mempool中的outPoint
-     * 数据，这些outpoint将不再花费mempool中的任何交易
+     * 从交易池中移除交易，直到交易池的内存小号达到指定大小。
+     * 如果参数二不为空，标识想要知道 这些删除的交易中，直接依赖UTXO集合的引用。当这个函数返回时，
+     * 可以在外部依据此信息，对UTXO集合进行修改，因为这些引用输出没有被花费。
      */
     void TrimToSize(size_t sizelimit,
                     std::vector<COutPoint> *pvNoSpendsRemaining = nullptr);
 
     /** Expire all transaction (and their dependencies) in the mempool older
      * than time. Return the number of removed transactions.
-     * 删除交易池中指定时间之前的交易，以及它所有的父交易，并返回删除的总交易个数。
+     * 删除交易池中指定时间之前的交易，以及它所有的后代交易，并返回删除的总交易个数。
      * */
     int Expire(int64_t time);
 

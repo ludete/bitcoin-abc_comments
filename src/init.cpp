@@ -1725,6 +1725,7 @@ bool AppInitMain(Config &config, boost::thread_group &threadGroup,
 
     peerLogic.reset(new PeerLogicValidation(&connman));
     RegisterValidationInterface(peerLogic.get());
+    //注册节点节点的处理操作
     RegisterNodeSignals(GetNodeSignals());
 
     if (mapMultiArgs.count("-onlynet")) {

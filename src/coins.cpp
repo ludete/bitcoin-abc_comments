@@ -125,14 +125,14 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin coin,
     if (!inserted) {
         cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
     }
-    //5. 非coinbase交易，进入下列条件
+    //5. 是否可能重写。不可能重写，进入下列条件
     if (!possible_overwrite) {
         //6. 此时 队祖的第二个位置应该是不可以花费的交易，因为上一步只插入了key(即outpoint)，下一步才会将对应的coin插入。
         if (!it->second.coin.IsSpent()) {
             throw std::logic_error(
                 "Adding new coin that replaces non-pruned entry");
         }
-        //7. 此时如果是新的coin，flags = 0；则fresh = true. 如果
+        //7. 此时如果是新的coin，flags = 0；则fresh = true. 没有设置DIRTY时，fresh为true.
         fresh = !(it->second.flags & CCoinsCacheEntry::DIRTY);
     }
     //8. 将这个coin插入 队组中。

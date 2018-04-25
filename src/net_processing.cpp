@@ -47,18 +47,24 @@ struct IteratorComparator {
     }
 };
 
+// 孤儿交易
 struct COrphanTx {
     // When modifying, adapt the copy of this definition in tests/DoS_tests.
-    CTransactionRef tx;
-    NodeId fromPeer;
-    int64_t nTimeExpire;
+    // 当此处修改时，需要同时修改 tests/DoS_tests 的副本。
+    CTransactionRef tx;     //交易
+    NodeId fromPeer;        //来自于那个节点
+    int64_t nTimeExpire;    //超时时间
 };
+
+// 孤儿交易的信息
 std::map<uint256, COrphanTx> mapOrphanTransactions GUARDED_BY(cs_main);
+// 存储孤儿交易及 它所有的引用输出
 std::map<COutPoint,
          std::set<std::map<uint256, COrphanTx>::iterator, IteratorComparator>>
     mapOrphanTransactionsByPrev GUARDED_BY(cs_main);
 void EraseOrphansFor(NodeId peer) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+// 存储额外一种类型的交易
 static size_t vExtraTxnForCompactIt = 0;
 static std::vector<std::pair<uint256, CTransactionRef>>
     vExtraTxnForCompact GUARDED_BY(cs_main);
@@ -76,6 +82,8 @@ int nSyncStarted = 0;
  * ban them when processing happens afterwards. Protected by cs_main.
  * Set mapBlockSource[hash].second to false if the node should not be punished
  * if the block is invalid.
+ *
+ * 接收到的区块资源，存储起来，以便处理之后发出
  */
 std::map<uint256, std::pair<NodeId, bool>> mapBlockSource;
 
@@ -97,7 +105,10 @@ std::map<uint256, std::pair<NodeId, bool>> mapBlockSource;
  *
  * Memory used: 1.3 MB
  */
+// 缓存所有验证正确，但又未被加入到交易池的孤儿交易。  这个全局变量，每当接收到一个新的有效的块，
+// 并链接到主链上后，该集合都会被重置，清空。
 std::unique_ptr<CRollingBloomFilter> recentRejects;
+
 uint256 hashRecentRejectsChainTip;
 
 /** Blocks that are in flight, and that are in the queue to be downloaded.
@@ -123,7 +134,9 @@ int nPreferredDownload = 0;
 /** Number of peers from which we're downloading blocks. */
 int nPeersWithValidatedDownloads = 0;
 
-/** Relay map, protected by cs_main. */
+/** Relay map, protected by cs_main.
+ * 中继的交易信息
+ * */
 typedef std::map<uint256, CTransactionRef> MapRelay;
 MapRelay mapRelay;
 /** Expiration-time ordered list of (expire time, relay map entry) pairs,
@@ -149,18 +162,23 @@ struct CBlockReject {
  * by CNode's own locks. This simplifies asynchronous operation, where
  * processing of incoming data is done after the ProcessMessage call returns,
  * and we're no longer holding the node's locks.
+ * 维护节点的特定验证状态，由cs_main保护，而不是节点自己的锁。 这简化了异步操作，在 ProcessMessage
+ * 调用返回之后，处理接收的数据，并且不再含有 节点内部锁。
+ *
+ * 节点的状态信息
  */
 struct CNodeState {
-    //! The peer's address
+    //! The peer's address      这个节点的地址
     const CService address;
-    //! Whether we have a fully established connection.
+    //! Whether we have a fully established connection.  是否与这个节点建立了链接
     bool fCurrentlyConnected;
     //! Accumulated misbehaviour score for this peer.
+    // 累计该节点的不当行为
     int nMisbehavior;
     //! Whether this peer should be disconnected and banned (unless
-    //! whitelisted).
+    //! whitelisted).  判断该节点是否应该被断开链接，且放入黑名单。
     bool fShouldBan;
-    //! String name of this peer (debugging/logging purposes).
+    //! String name of this peer (debugging/logging purposes). 这个节点的名称
     const std::string name;
     //! List of asynchronously-determined block rejections to notify this peer
     //! about.
@@ -231,10 +249,13 @@ struct CNodeState {
     }
 };
 
-/** Map maintaining per-node state. Requires cs_main. */
+/** Map maintaining per-node state. Requires cs_main.
+ * 包含所有节点的状态
+ * */
 std::map<NodeId, CNodeState> mapNodeState;
 
 // Requires cs_main.
+//  返回一个节点的状态
 CNodeState *State(NodeId pnode) {
     std::map<NodeId, CNodeState>::iterator it = mapNodeState.find(pnode);
     if (it == mapNodeState.end()) {
@@ -287,6 +308,7 @@ void PushNodeVersion(const Config &config, CNode *pnode, CConnman &connman,
     }
 }
 
+//    初始化节点
 void InitializeNode(const Config &config, CNode *pnode, CConnman &connman) {
     CAddress addr = pnode->addr;
     std::string addrName = pnode->GetAddrName();
@@ -689,10 +711,15 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     return true;
 }
 
+// 注册节点处理信息槽函数
 void RegisterNodeSignals(CNodeSignals &nodeSignals) {
+    //1. 处理节点接收到的网络信息
     nodeSignals.ProcessMessages.connect(&ProcessMessages);
+    //2. 处理节点向网络中发送信息
     nodeSignals.SendMessages.connect(&SendMessages);
+    //3. 初始化节点
     nodeSignals.InitializeNode.connect(&InitializeNode);
+    //4.
     nodeSignals.FinalizeNode.connect(&FinalizeNode);
 }
 
@@ -708,6 +735,7 @@ void UnregisterNodeSignals(CNodeSignals &nodeSignals) {
 // mapOrphanTransactions
 //
 
+// 将传入的交易加入全局的集合中
 void AddToCompactExtraTransactions(const CTransactionRef &tx) {
     size_t max_extra_txn = GetArg("-blockreconstructionextratxn",
                                   DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN);
@@ -715,10 +743,11 @@ void AddToCompactExtraTransactions(const CTransactionRef &tx) {
         return;
     }
 
+    //1. 如果集合的数量为0，重置该交易集合的大小
     if (!vExtraTxnForCompact.size()) {
         vExtraTxnForCompact.resize(max_extra_txn);
     }
-
+    //2. 将传入的交易加入集合中
     vExtraTxnForCompact[vExtraTxnForCompactIt] =
         std::make_pair(tx->GetHash(), tx);
     vExtraTxnForCompactIt = (vExtraTxnForCompactIt + 1) % max_extra_txn;
@@ -759,22 +788,30 @@ bool AddOrphanTx(const CTransactionRef &tx, NodeId peer)
     return true;
 }
 
+//移除孤儿交易
 static int EraseOrphanTx(uint256 hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+    //1. 去全局缓存中查找该孤儿交易
     std::map<uint256, COrphanTx>::iterator it =
         mapOrphanTransactions.find(hash);
+    //2. 如果未找到，直接返回0，标识没有删除
     if (it == mapOrphanTransactions.end()) {
         return 0;
     }
+    //3. 如果找到，遍历该孤儿交易的所有交易输入
     for (const CTxIn &txin : it->second.tx->vin) {
+        //4. 查找它的引用输出是否存在于 全局的缓存孤儿交易中，如果不存在，继续遍历下一个引用输出。
         auto itPrev = mapOrphanTransactionsByPrev.find(txin.prevout);
         if (itPrev == mapOrphanTransactionsByPrev.end()) {
             continue;
         }
+        //5. 如果存在，从该迭代器中删除当前的交易
         itPrev->second.erase(it);
+        //6. 如果所有花费该引用输出的交易都被删除了，则从全局的孤儿交易中，删除该该孤儿交易对。
         if (itPrev->second.empty()) {
             mapOrphanTransactionsByPrev.erase(itPrev);
         }
     }
+    //7. 从全局的孤儿交易中删除该交易
     mapOrphanTransactions.erase(it);
     return 1;
 }
@@ -795,6 +832,7 @@ void EraseOrphansFor(NodeId peer) {
     }
 }
 
+//限制孤儿交易的集合大小
 unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     unsigned int nEvicted = 0;
@@ -839,18 +877,23 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans)
 }
 
 // Requires cs_main.
+//惩戒一个链接的节点，因为它给了我们一个错误信息
 void Misbehaving(NodeId pnode, int howmuch, const std::string &reason) {
+    //1. 如果出错码为0， 直接退出
     if (howmuch == 0) {
         return;
     }
 
+    //2. 获取该链接节点的状态信息，如果状态信息为空，也直接退出，因为该节点已被断开链接
     CNodeState *state = State(pnode);
     if (state == nullptr) {
         return;
     }
 
+    //3. 累计该节点的出错次数， 获取配置的每个节点的最大罪恶分数。
     state->nMisbehavior += howmuch;
     int banscore = GetArg("-banscore", DEFAULT_BANSCORE_THRESHOLD);
+    //4. 如果该节点的作恶分数达到阈值，禁用该节点。
     if (state->nMisbehavior >= banscore &&
         state->nMisbehavior - howmuch < banscore) {
         LogPrintf(
@@ -1051,18 +1094,23 @@ void PeerLogicValidation::BlockChecked(const CBlock &block,
 //
 // Messages
 //
-
+//查看该消息是否已经存在。存在，返回true。 不存在，返回false。
 static bool AlreadyHave(const CInv &inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+
     switch (inv.type) {
+        // 该消息为 交易类型
         case MSG_TX: {
             assert(recentRejects);
+            // 如果当前激活链的最新区块  不等于  全局状态的缓存
             if (chainActive.Tip()->GetBlockHash() !=
                 hashRecentRejectsChainTip) {
                 // If the chain tip has changed previously rejected transactions
                 // might be now valid, e.g. due to a nLockTime'd tx becoming
                 // valid, or a double-spend. Reset the rejects filter and give
                 // those txs a second chance.
+                // 更新全局的缓存状态为 当前主链的最高块； 重新设置最近的拒绝。
                 hashRecentRejectsChainTip = chainActive.Tip()->GetBlockHash();
+                // 重置全局的拒绝交易集合；每当主链更新了一个新块时，都会去重置这个集合。
                 recentRejects->reset();
             }
 
@@ -1071,21 +1119,30 @@ static bool AlreadyHave(const CInv &inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
             // included in a block. As this is best effort, we only check for
             // output 0 and 1. This works well enough in practice and we get
             // diminishing returns with 2 onward.
+            // 使用pcoinsTip->HaveCoinInCache 作为一个快速的近似值来排除请求，或处理已经被包含到块中的交易。
+            // 因为这是最好的优化，仅需要检查输出0和1. 并且在实际中工作良好，而且在2年前获得递减收益。
+            // 只要有一个为真，则为真。
+            // 是否在拒绝的集合中，是否在交易池中，是否在孤儿交易中，是否在UTXO集合中
             return recentRejects->contains(inv.hash) ||
                    mempool.exists(inv.hash) ||
                    mapOrphanTransactions.count(inv.hash) ||
                    pcoinsTip->HaveCoinInCache(COutPoint(inv.hash, 0)) ||
                    pcoinsTip->HaveCoinInCache(COutPoint(inv.hash, 1));
         }
+        // 该消息为 区块类型，查看本节点是否接受到了该区块。
         case MSG_BLOCK:
             return mapBlockIndex.count(inv.hash);
     }
+
     // Don't know what it is, just say we already got one
+    // 对于不知道的类型，默认它已存在
     return true;
 }
 
+// 中继被添加到交易池中的交易。
 static void RelayTransaction(const CTransaction &tx, CConnman &connman) {
     CInv inv(MSG_TX, tx.GetId());
+    // 将该交易添加到每个链接节点的  待处理仓库中
     connman.ForEachNode([&inv](CNode *pnode) { pnode->PushInventory(inv); });
 }
 
@@ -1131,29 +1188,36 @@ static void RelayAddress(const CAddress &addr, bool fReachable,
     connman.ForEachNodeThen(std::move(sortfunc), std::move(pushfunc));
 }
 
+// 接收信息
 static void ProcessGetData(const Config &config, CNode *pfrom,
                            const Consensus::Params &consensusParams,
                            CConnman &connman,
                            const std::atomic<bool> &interruptMsgProc) {
+    //1. 获取缓冲区的起始位置
     std::deque<CInv>::iterator it = pfrom->vRecvGetData.begin();
     std::vector<CInv> vNotFound;
     const CNetMsgMaker msgMaker(pfrom->GetSendVersion());
     LOCK(cs_main);
 
+    //2. 进行数据的解析
     while (it != pfrom->vRecvGetData.end()) {
         // Don't bother if send buffer is too full to respond anyway.
+        // 如果发送缓冲区装满了各种应答，就不要处理了。直接跳出
         if (pfrom->fPauseSend) {
             break;
         }
 
         const CInv &inv = *it;
         {
+            //3. 如果中止信息处理，则直接返回
             if (interruptMsgProc) {
                 return;
             }
 
             it++;
 
+            //4. 新判断信息的类型。(第一个字节为信息的类型)
+            // 有关区块的信息
             if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK ||
                 inv.type == MSG_CMPCT_BLOCK) {
                 bool send = false;
@@ -1308,17 +1372,23 @@ static void ProcessGetData(const Config &config, CNode *pfrom,
                         pfrom->hashContinue.SetNull();
                     }
                 }
-            } else if (inv.type == MSG_TX) {
+            }
+                // 有关交易类型的信息
+            else if (inv.type == MSG_TX) {
                 // Send stream from relay memory
                 bool push = false;
+                // 在全局中继信息中，查找该中继的交易
                 auto mi = mapRelay.find(inv.hash);
                 int nSendFlags = 0;
+                // 如果该信息存在于中继信息中，
                 if (mi != mapRelay.end()) {
+                    //
                     connman.PushMessage(
                         pfrom,
                         msgMaker.Make(nSendFlags, NetMsgType::TX, *mi->second));
                     push = true;
                 } else if (pfrom->timeLastMempoolReq) {
+                    // 如果该交易在交易池中
                     auto txinfo = mempool.info(inv.hash);
                     // To protect privacy, do not answer getdata using the
                     // mempool when that TX couldn't have been INVed in reply to
@@ -1331,14 +1401,15 @@ static void ProcessGetData(const Config &config, CNode *pfrom,
                         push = true;
                     }
                 }
+                // 如果未找到，将这个信息放入集合中
                 if (!push) {
                     vNotFound.push_back(inv);
                 }
             }
 
-            // Track requests for our stuff.
+            // Track requests for our stuff. 跟踪我们请求的事情
             GetMainSignals().Inventory(inv.hash);
-
+            // 如果是与区块有关的信息，直接跳出 。
             if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK ||
                 inv.type == MSG_CMPCT_BLOCK) {
                 break;
@@ -1346,8 +1417,10 @@ static void ProcessGetData(const Config &config, CNode *pfrom,
         }
     }
 
+    // 删除已被解析完成的数据内容
     pfrom->vRecvGetData.erase(pfrom->vRecvGetData.begin(), it);
 
+    // 如果有为查找的信息，那么向所有的其他的节点进行广播。
     if (!vNotFound.empty()) {
         // Let the peer know that we didn't find what it asked for, so it
         // doesn't have to wait around forever. Currently only SPV clients
@@ -1404,14 +1477,17 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
         return true;
     }
 
+    // 如果该节点不支持BLOOM过滤器，但是命令是bloom 过滤器的命令。
     if (!(pfrom->GetLocalServices() & NODE_BLOOM) &&
         (strCommand == NetMsgType::FILTERLOAD ||
          strCommand == NetMsgType::FILTERADD)) {
+        // 如果节点不支持bloom过滤器，出错退出。
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
             LOCK(cs_main);
             Misbehaving(pfrom, 100, "no-bloom-version");
             return false;
         } else {
+            // 否则，应该是节点信息出错，断开该链接。
             pfrom->fDisconnect = true;
             return false;
         }
@@ -2051,25 +2127,31 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
                             msgMaker.Make(NetMsgType::HEADERS, vHeaders));
     }
 
-    else if (strCommand == NetMsgType::TX) {        //标识发送单个消息
+    else if (strCommand == NetMsgType::TX) {
+        //1. 标识接收到了一个交易消息
         // Stop processing the transaction early if
         // We are in blocks only mode and peer is either not whitelisted or
         // whitelistrelay is off
+        // 仅当处于阻塞模式，且对等节点不在白名单或禁用白名单时，尽早停止处理交易信息。
         if (!fRelayTxes &&
             (!pfrom->fWhitelisted ||
              !GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY))) {
             LogPrint("net",
                      "transaction sent in violation of protocol peer=%d\n",
                      pfrom->id);
+            // 交易违反对等点协议发送。
             return true;
         }
 
-        std::deque<COutPoint> vWorkQueue;
-        std::vector<uint256> vEraseQueue;
+        //2.
+        std::deque<COutPoint> vWorkQueue;       //存储的是当前处理交易 作为引用输出的所有outpoint。
+        std::vector<uint256> vEraseQueue;       //存储成功被添加进交易池的 孤儿交易
+        //3. 解析数据流中的交易
         CTransactionRef ptx;
         vRecv >> ptx;
         const CTransaction &tx = *ptx;
 
+        //4. 生成交易类型。然后将这个数据添加到节点
         CInv inv(MSG_TX, tx.GetId());
         pfrom->AddInventoryKnown(inv);
 
@@ -2078,21 +2160,23 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
         bool fMissingInputs = false;
         CValidationState state;
 
-        pfrom->setAskFor.erase(inv.hash);
+        pfrom->setAskFor.erase(inv.hash);       //从节点的缓冲中删除这个交易
         mapAlreadyAskedFor.erase(inv.hash);     //从全局状态中移除这个交易
 
         std::list<CTransactionRef> lRemovedTxn;
-
+        //5. 如果该交易消息不存在当前节点，且成功加入到了交易池。
         if (!AlreadyHave(inv) &&
             AcceptToMemoryPool(config, mempool, state, ptx, true,
                                &fMissingInputs, &lRemovedTxn)) {
             mempool.check(pcoinsTip);
-            //中继交易
+            //6. 将该交易添加到 所有链接节点的 待处理集合中
             RelayTransaction(tx, connman);
+            //7. 遍历该交易的所有输出
             for (size_t i = 0; i < tx.vout.size(); i++) {
+                // 构造该交易的输出，将它插入工作队列中
                 vWorkQueue.emplace_back(inv.hash, i);
             }
-
+            //8. 该节点 最后接收到交易的时间
             pfrom->nLastTXTime = GetTime();
 
             LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s "
@@ -2102,104 +2186,131 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
 
             // Recursively process any orphan transactions that depended on this
             // one
+            //9. 递归处理依赖该交易的所有孤儿交易
             std::set<NodeId> setMisbehaving;
+
+            //10. 如果处理不为空，进入
             while (!vWorkQueue.empty()) {
+                //11. 如果孤儿交易中 有使用 刚添加到交易池的交易作为父交易的交易。
                 auto itByPrev =
                     mapOrphanTransactionsByPrev.find(vWorkQueue.front());
                 vWorkQueue.pop_front();
                 if (itByPrev == mapOrphanTransactionsByPrev.end()) {
                     continue;
                 }
+                //12. 遍历所有的孤儿交易
                 for (auto mi = itByPrev->second.begin();
                      mi != itByPrev->second.end(); ++mi) {
+                    //13. 获取该孤儿交易
                     const CTransactionRef &porphanTx = (*mi)->second.tx;
                     const CTransaction &orphanTx = *porphanTx;
                     const uint256 &orphanId = orphanTx.GetId();
-                    NodeId fromPeer = (*mi)->second.fromPeer;
+                    NodeId fromPeer = (*mi)->second.fromPeer;       // 获取该孤儿交易来自节点的ID。
                     bool fMissingInputs2 = false;
                     // Use a dummy CValidationState so someone can't setup nodes
                     // to counter-DoS based on orphan resolution (that is,
                     // feeding people an invalid transaction based on LegitTxX
                     // in order to get anyone relaying LegitTxX banned)
                     CValidationState stateDummy;
-
+                    //14. 判断当前的节点 是否在发送孤儿交易的节点集合中，如果存在，继续下次循环。
                     if (setMisbehaving.count(fromPeer)) {
                         continue;
                     }
+                    //15. 接收该孤儿交易到交易池
                     if (AcceptToMemoryPool(config, mempool, stateDummy,
                                            porphanTx, true, &fMissingInputs2,
                                            &lRemovedTxn)) {
                         LogPrint("mempool", "   accepted orphan tx %s\n",
                                  orphanId.ToString());
+                        //16. 将该孤儿交易添加到节点的待中继交易集合中
                         RelayTransaction(orphanTx, connman);
+                        //17. 构造以该孤儿交易作为父交易的 outpoint结构，并将它们放入工作队列中
                         for (size_t i = 0; i < orphanTx.vout.size(); i++) {
                             vWorkQueue.emplace_back(orphanId, i);
                         }
+                        //17. 将成功添加进交易池的孤儿交易加入 移除队列中。
                         vEraseQueue.push_back(orphanId);
                     } else if (!fMissingInputs2) {
+                        //18. 如果该孤儿交易还是缺少输入
                         int nDos = 0;
+                        //19. 判断该交易是否属于DOS攻击，nDos 在IsInvalid()方法中为传出参数，如果nDos >0,则标识位DOS攻击。
                         if (stateDummy.IsInvalid(nDos) && nDos > 0) {
                             // Punish peer that gave us an invalid orphan tx
+                            // 惩戒这个给了我们一个 无效的孤儿交易的节点，如果达到作恶阈值，设置标识，断开该节点
                             Misbehaving(fromPeer, nDos, "invalid-orphan-tx");
-                            setMisbehaving.insert(fromPeer);
+                            setMisbehaving.insert(fromPeer);        // 将该节点放入作恶节点集合。
                             LogPrint("mempool", "   invalid orphan tx %s\n",
                                      orphanId.ToString());
                         }
+                        //20. 到达这步时，标识本地节点含有该孤儿的所有交易输入，但是还是没有被添加进区块中，可能是因为非标准交易，或者交易费不足
                         // Has inputs but not accepted to mempool
                         // Probably non-standard or insufficient fee/priority
                         LogPrint("mempool", "   removed orphan tx %s\n",
                                  orphanId.ToString());
+                        //所以此时应该将该孤儿交易放入交易删除队列中。
                         vEraseQueue.push_back(orphanId);
+                        //21. 如果该交易的状态 未出错。
                         if (!stateDummy.CorruptionPossible()) {
                             // Do not use rejection cache for witness
                             // transactions or witness-stripped transactions, as
                             // they can have been malleated. See
                             // https://github.com/bitcoin/bitcoin/issues/8279
                             // for details.
+                            // 不要使用 拒绝缓存区存储 witness交易或witness...的交易，因为他们可能会延展。
                             assert(recentRejects);
                             recentRejects->insert(orphanId);
                         }
                     }
+                    // 检查交易池
                     mempool.check(pcoinsTip);
                 }
             }
-            //移除孤儿交易
+            //此时已经递归添加完该交易，以及孤儿交易中以该交易作为父交易或祖先交易的孤儿交易，然后删除这轮中需要去除的孤儿交易
+            // (1.这些孤儿交易已经被添加到交易池，2.该孤儿交易属于恶意攻击，3.该孤儿由于交易过低的交易费，不被添加到交易池中)
             for (uint256 hash : vEraseQueue) {
                 EraseOrphanTx(hash);
             }
         } else if (fMissingInputs) {
+            // 如果当前接收到的交易缺少 父交易。
             // It may be the case that the orphans parents have all been
-            // rejected.
+            // rejected. 可能存在这样一种情况，该孤儿交易的父交易已经被拒绝
             bool fRejectedParents = false;
+            // 遍历该交易的所有引用输入， 查看在全局的拒绝交易缓存中是否含有该交易。
             for (const CTxIn &txin : tx.vin) {
+                // 如果这个交易的某个父交易已经被 拒绝，跳出循环
                 if (recentRejects->contains(txin.prevout.hash)) {
                     fRejectedParents = true;
                     break;
                 }
             }
+            // 如果在全局的拒绝缓存中没有找到该交易的父交易，标识该交易的父交易应该还未接收。
             if (!fRejectedParents) {
                 uint32_t nFetchFlags = GetFetchFlags(
                     pfrom, chainActive.Tip(), chainparams.GetConsensus());
                 for (const CTxIn &txin : tx.vin) {
+                    // 创建一个交易，向网络中的其它节点请求这些 父交易
                     CInv _inv(MSG_TX | nFetchFlags, txin.prevout.hash);
                     pfrom->AddInventoryKnown(_inv);
                     if (!AlreadyHave(_inv)) {
-                        pfrom->AskFor(_inv);
+                        pfrom->AskFor(_inv);        //向节点和全局状态中，插入该条准备广播的信息。
                     }
                 }
+                // 将该交易添加进孤儿交易集合中
                 AddOrphanTx(ptx, pfrom->GetId());
 
                 // DoS prevention: do not allow mapOrphanTransactions to grow
-                // unbounded
+                // unbounded DOS防护，不允许孤儿交易集合无限制的增长。
                 unsigned int nMaxOrphanTx = (unsigned int)std::max(
                     int64_t(0),
                     GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
+                // 限制孤儿交易集合的大小
                 unsigned int nEvicted = LimitOrphanTxSize(nMaxOrphanTx);
                 if (nEvicted > 0) {
                     LogPrint("mempool", "mapOrphan overflow, removed %u tx\n",
                              nEvicted);
                 }
             } else {
+                //如果该交易的父交易被包含在 拒绝交易的集合中，则将当前交易也插入拒绝交易集合中。
                 LogPrint("mempool",
                          "not keeping orphan with rejected parents %s\n",
                          tx.GetId().ToString());
@@ -2208,18 +2319,21 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
                 recentRejects->insert(tx.GetId());
             }
         } else {
+            // 其他情况
+            // 如果该交易没有出错，则进入下列条件
             if (!state.CorruptionPossible()) {
                 // Do not use rejection cache for witness transactions or
                 // witness-stripped transactions, as they can have been
                 // malleated. See https://github.com/bitcoin/bitcoin/issues/8279
                 // for details.
                 assert(recentRejects);
+                // 将它添加在 拒绝交易集合中
                 recentRejects->insert(tx.GetId());
                 if (RecursiveDynamicUsage(*ptx) < 100000) {
                     AddToCompactExtraTransactions(ptx);
                 }
             }
-
+            // 如果启用了白名单
             if (pfrom->fWhitelisted &&
                 GetBoolArg("-whitelistforcerelay",
                            DEFAULT_WHITELISTFORCERELAY)) {
@@ -2227,10 +2341,13 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
                 // even if they were already in the mempool or rejected from it
                 // due to policy, allowing the node to function as a gateway for
                 // nodes hidden behind it.
+                // 一直中继来自白名单节点的交易信息，即使它已经在交易池或拒绝集合中(由于费率等。。。)
+                // 允许本节点在此处作为一个网关来使用
                 //
                 // Never relay transactions that we would assign a non-zero DoS
                 // score for, as we expect peers to do the same with us in that
                 // case.
+                // 从来不要中继那些错误的信息，（防止可能出现的DOS信息）
                 int nDoS = 0;
                 if (!state.IsInvalid(nDoS) || nDoS == 0) {
                     LogPrintf("Force relaying tx %s from whitelisted peer=%d\n",
@@ -2245,16 +2362,20 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
             }
         }
 
+        //遍历这个交易列表，将该列表中的交易都添加到全局状态中
         for (const CTransactionRef &removedTx : lRemovedTxn) {
             AddToCompactExtraTransactions(removedTx);
         }
 
+
         int nDoS = 0;
+        //获取交易的状态， 如果是无效的交易，进入下列条件。
         if (state.IsInvalid(nDoS)) {
             LogPrint("mempoolrej", "%s from peer=%d was not accepted: %s\n",
                      tx.GetId().ToString(), pfrom->id,
                      FormatStateMessage(state));
             // Never send AcceptToMemoryPool's internal codes over P2P.
+            // 从来不要发送 交易池内部的状态码给其它节点。
             if (state.GetRejectCode() < REJECT_INTERNAL) {
                 connman.PushMessage(
                     pfrom, msgMaker.Make(NetMsgType::REJECT, strCommand,
@@ -3096,32 +3217,39 @@ bool ProcessMessages(const Config &config, CNode *pfrom, CConnman &connman,
     //
     bool fMoreWork = false;
 
+    //1. 如果节点的接收缓冲区非空，则去处理接收的数据
     if (!pfrom->vRecvGetData.empty()) {
         ProcessGetData(config, pfrom, chainparams.GetConsensus(), connman,
                        interruptMsgProc);
     }
 
+    //2. 如果该节点被禁用，则直接退出
     if (pfrom->fDisconnect) {
         return false;
     }
 
     // this maintains the order of responses
+    //3. 如果该节点的接收数据不为空，也退出。
     if (!pfrom->vRecvGetData.empty()) {
         return true;
     }
 
     // Don't bother if send buffer is too full to respond anyway
+    //4. 如果发送缓冲区已满，也退出
     if (pfrom->fPauseSend) {
         return false;
     }
 
+    //5. 网络消息
     std::list<CNetMessage> msgs;
     {
         LOCK(pfrom->cs_vProcessMsg);
+        //6. 如果无消息，则直接退出
         if (pfrom->vProcessMsg.empty()) {
             return false;
         }
         // Just take one message
+        //7. 仅消费一条消息
         msgs.splice(msgs.begin(), pfrom->vProcessMsg,
                     pfrom->vProcessMsg.begin());
         pfrom->nProcessQueueSize -=
@@ -3241,6 +3369,7 @@ public:
     }
 };
 
+// 发送信息至网络节点
 bool SendMessages(const Config &config, CNode *pto, CConnman &connman,
                   const std::atomic<bool> &interruptMsgProc) {
     const Consensus::Params &consensusParams = Params().GetConsensus();

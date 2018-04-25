@@ -175,6 +175,8 @@ extern const char *NOTFOUND;
  *   Only available with service bit NODE_BLOOM since protocol version
  *   70011 as described by BIP111.
  * @see https://bitcoin.org/en/developer-reference#filterload
+ *  filterload消息告诉对等接收方去过滤所有的中继信息，并且通过提供的过滤器请求 merkle块。
+ *
  */
 extern const char *FILTERLOAD;
 /**
@@ -184,6 +186,9 @@ extern const char *FILTERLOAD;
  *   Only available with service bit NODE_BLOOM since protocol version
  *   70011 as described by BIP111.
  * @see https://bitcoin.org/en/developer-reference#filteradd
+ * filteradd信息告诉接收者去添加单个元素到先前设置的bloom过滤器，例如一个新的公钥。
+ * 该元素直接发送给接收者，对等节点然后使用给参数设置 filterload 信息，并添加元素到bloom过滤器。
+ *
  */
 extern const char *FILTERADD;
 /**
@@ -264,6 +269,8 @@ enum ServiceFlags : uint64_t {
     // connections. Bitcoin Core nodes used to support this by default, without
     // advertising this bit, but no longer do as of protocol version 70011 (=
     // NO_BLOOM_VERSION)
+    // NODE_BLOOM 标识该节点能够，并且愿意处理Bloom 过滤器的链接。比特币客户端默认支持该功能。
+    // 不用广告此位，但是不再支持协议版本70011.
     NODE_BLOOM = (1 << 2),
     // NODE_XTHIN means the node supports Xtreme Thinblocks. If this is turned
     // off then the node will not service nor make xthin requests.
@@ -324,20 +331,21 @@ const uint32_t MSG_TYPE_MASK = 0xffffffff >> 3;
 /** getdata / inv message types.
  * These numbers are defined by the protocol. When adding a new value, be sure
  * to mention it in the respective BIP.
+ * 信息类型。这些数字由协议定义。当添加一个新类型时，请必须在对应的BIP中提及。
  */
 enum GetDataMsg {
     UNDEFINED = 0,
-    MSG_TX = 1,
-    MSG_BLOCK = 2,
+    MSG_TX = 1,         // 交易信息类型
+    MSG_BLOCK = 2,      // 区块的信息类型
     // The following can only occur in getdata. Invs always use TX or BLOCK.
     //!< Defined in BIP37
-    MSG_FILTERED_BLOCK = 3,
+    MSG_FILTERED_BLOCK = 3,     //bloom过滤器信息
     //!< Defined in BIP152
-    MSG_CMPCT_BLOCK = 4,
+    MSG_CMPCT_BLOCK = 4,        //压缩块信息
 
     //!< Extension block
-    MSG_EXT_TX = MSG_TX | MSG_EXT_FLAG,
-    MSG_EXT_BLOCK = MSG_BLOCK | MSG_EXT_FLAG,
+    MSG_EXT_TX = MSG_TX | MSG_EXT_FLAG,     //拓展类型的交易信息
+    MSG_EXT_BLOCK = MSG_BLOCK | MSG_EXT_FLAG,//拓展类型的块信息
 };
 
 /** inv message data
@@ -350,6 +358,7 @@ public:
 
     ADD_SERIALIZE_METHODS;
 
+    // 序列化信息类型的 数据
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream &s, Operation ser_action) {
         READWRITE(type);
@@ -358,16 +367,20 @@ public:
 
     friend bool operator<(const CInv &a, const CInv &b);
 
+    //获取命令
     std::string GetCommand() const;
     std::string ToString() const;
 
+    //获取命令的类型
     uint32_t GetKind() const { return type & MSG_TYPE_MASK; }
 
+    // 是否为交易的信息
     bool IsTx() const {
         auto k = GetKind();
         return k == MSG_TX;
     }
 
+    // 是否为一些块的 信息
     bool IsSomeBlock() const {
         auto k = GetKind();
         return k == MSG_BLOCK || k == MSG_FILTERED_BLOCK ||

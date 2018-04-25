@@ -5,14 +5,17 @@
 
 #include "threadinterrupt.h"
 
+//加载flag中的数据。
 CThreadInterrupt::operator bool() const {
     return flag.load(std::memory_order_acquire);
 }
 
+//重新设置flag
 void CThreadInterrupt::reset() {
     flag.store(false, std::memory_order_release);
 }
 
+//打断所有的睡眠线程。ß
 void CThreadInterrupt::operator()() {
     {
         std::unique_lock<std::mutex> lock(mut);
@@ -21,6 +24,7 @@ void CThreadInterrupt::operator()() {
     cond.notify_all();
 }
 
+//睡眠一定的时间
 bool CThreadInterrupt::sleep_for(std::chrono::milliseconds rel_time) {
     std::unique_lock<std::mutex> lock(mut);
     return !cond.wait_for(lock, rel_time, [this]() {

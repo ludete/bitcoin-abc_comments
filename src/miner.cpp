@@ -176,7 +176,7 @@ BlockAssembler::CreateNewBlock(const CScript &scriptPubKeyIn) {
     pblocktemplate->vTxSigOpsCount.push_back(-1);
 
     //5. 设定当前块模板的高度。即当前主链的高度+1
-    LOCK2(cs_main, mempool.cs);
+    LOCK2(cs_main, mempool.cs);                     // 加锁。主锁和交易池的锁。
     CBlockIndex *pindexPrev = chainActive.Tip();
     nHeight = pindexPrev->nHeight + 1;
 
@@ -437,6 +437,7 @@ int BlockAssembler::UpdatePackagesForAdded(
             modtxiter mit = mapModifiedTx.find(desc);
             //6. 不存在，构造一个可以修改的交易条目，修改条目的祖先状态(减去已被添加的交易)，并将该交易插入mapModifiedTx中，
             if (mit == mapModifiedTx.end()) {
+                //构建一个新的对象
                 CTxMemPoolModifiedEntry modEntry(desc);
                 modEntry.nSizeWithAncestors -= it->GetTxSize();
                 modEntry.nModFeesWithAncestors -= it->GetModifiedFee();
@@ -512,7 +513,7 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected,
 
     // Start by adding all descendants of previously added txs to mapModifiedTx
     // and modifying them for their already included ancestors.
-    //1. 开始添加已经添加到块的交易的 所有后代交易到   mapModifiedTx 中，并修改他们的祖先交易状态。
+    //1. 将已经添加到块的交易的 所有后代交易添加到   mapModifiedTx 中，并修改他们的祖先交易状态。
     // mapModifiedTx 中存储的都是在交易池中的交易。
     UpdatePackagesForAdded(inBlock, mapModifiedTx);
 
@@ -532,7 +533,7 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected,
     while (mi != mempool.mapTx.get<ancestor_score>().end() ||
            !mapModifiedTx.empty()) {
         // First try to find a new transaction in mapTx to evaluate.
-        //3. 遍历当前交易池的首个交易， 判断是否需已在块中，已在临时存储集合中，是否已在失败集合中。
+        //3. 遍历当前交易池的首个交易， 判断是否已在块中，已在临时存储集合中，是否已在失败集合中。
         // 存在，则跳过该交易，继续接下来的循环
         if (mi != mempool.mapTx.get<ancestor_score>().end() &&
             SkipMapTxEntry(mempool.mapTx.project<0>(mi), mapModifiedTx,
@@ -587,6 +588,7 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected,
         }
 
         //9. 获取该交易字节数 在当前块费率下需要的交易费； 交易费太低的，跳过。
+        // 最低费率； packageSize  = packageFees
         if (packageFees < blockMinFeeRate.GetFee(packageSize)) {
             // Everything else we might consider has a lower fee rate
             // 我们可能认为有一个最低的交易费率。

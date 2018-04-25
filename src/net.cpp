@@ -425,6 +425,7 @@ void CConnman::DumpBanlist() {
              banmap.size(), GetTimeMillis() - nStart);
 }
 
+// 关闭节点的socket链接
 void CNode::CloseSocketDisconnect() {
     fDisconnect = true;
     LOCK(cs_hSocket);
@@ -769,6 +770,7 @@ void CNode::SetSendVersion(int nVersionIn) {
     }
 }
 
+// 获取发送信息的版本号。 注意：此时这个值应该从对象初始化就被设置为 INIT_PROTO_VERSION。
 int CNode::GetSendVersion() const {
     // The send version should always be explicitly set to INIT_PROTO_VERSION
     // rather than using this value until SetSendVersion has been called.
@@ -836,7 +838,7 @@ const uint256 &CNetMessage::GetMessageHash() const {
     return data_hash;
 }
 
-// requires LOCK(cs_vSend)
+// requires LOCK(cs_vSend)  通过socket发送消息。
 size_t CConnman::SocketSendData(CNode *pnode) const {
     AssertLockHeld(pnode->cs_vSend);
     size_t nSentSize = 0;
@@ -1200,36 +1202,39 @@ void CConnman::AcceptConnection(const ListenSocket &hListenSocket) {
     }
 }
 
+// 线程socket的处理
 void CConnman::ThreadSocketHandler() {
     unsigned int nPrevNodeCount = 0;
     while (!interruptNet) {
         //
-        // Disconnect nodes
-        //
+        m// Disconnect nodes
+        // 断开节点
         {
             LOCK(cs_vNodes);
-            // Disconnect unused nodes
+            // Disconnect unused nodes  断开未使用的节点
             std::vector<CNode *> vNodesCopy = vNodes;
             for (CNode *pnode : vNodesCopy) {
+                // 如果该节点标识需要断开，
                 if (pnode->fDisconnect) {
-                    // remove from vNodes
+                    // remove from vNodes； 从节点集合中断开这个链接。
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode),
                                  vNodes.end());
 
-                    // release outbound grant (if any)
+                    // release outbound grant (if any)  释放信号量。
                     pnode->grantOutbound.Release();
 
-                    // close socket and cleanup
+                    // close socket and cleanup 关闭断开链接的socket
                     pnode->CloseSocketDisconnect();
 
                     // hold in disconnected pool until all refs are released
+                    // 将
                     pnode->Release();
                     vNodesDisconnected.push_back(pnode);
                 }
             }
         }
         {
-            // Delete disconnected nodes
+            // Delete disconnected nodes 删除断开的节点
             std::list<CNode *> vNodesDisconnectedCopy = vNodesDisconnected;
             for (CNode *pnode : vNodesDisconnectedCopy) {
                 // wait until threads are done using it
@@ -1361,7 +1366,7 @@ void CConnman::ThreadSocketHandler() {
 
         //
         // Service each socket
-        //
+        // 处理所有的TCP链接
         std::vector<CNode *> vNodesCopy;
         {
             LOCK(cs_vNodes);
@@ -1370,6 +1375,7 @@ void CConnman::ThreadSocketHandler() {
                 pnode->AddRef();
             }
         }
+
         for (CNode *pnode : vNodesCopy) {
             if (interruptNet) {
                 return;
@@ -1377,7 +1383,7 @@ void CConnman::ThreadSocketHandler() {
 
             //
             // Receive
-            //
+            //  接收消息
             bool recvSet = false;
             bool sendSet = false;
             bool errorSet = false;
@@ -2873,7 +2879,9 @@ CNode::~CNode() {
     }
 }
 
+// 本节点向外广播，请求该交易。
 void CNode::AskFor(const CInv &inv) {
+    //1. 如果待广播的集合已满，直接退出
     if (mapAskFor.size() > MAPASKFOR_MAX_SZ ||
         setAskFor.size() > SETASKFOR_MAX_SZ) {
         return;
@@ -2881,15 +2889,19 @@ void CNode::AskFor(const CInv &inv) {
 
     // a peer may not have multiple non-responded queue positions for a single
     // inv item.
+    //2. 插入失败，标识该交易已在队列中。
     if (!setAskFor.insert(inv.hash).second) {
         return;
     }
 
     // We're using mapAskFor as a priority queue, the key is the earliest time
     // the request can be sent.
+    //3. 使用 mapAskFor 作为优先队列，key是该请求可以发送的时间。
     int64_t nRequestTime;
+    //4. 查看该消息是否已在发送完请求的队列中。
     limitedmap<uint256, int64_t>::const_iterator it =
         mapAlreadyAskedFor.find(inv.hash);
+    //5. 如果在该队列中，获取该消息上一次被请求的时间
     if (it != mapAlreadyAskedFor.end()) {
         nRequestTime = it->second;
     } else {
@@ -2900,26 +2912,33 @@ void CNode::AskFor(const CInv &inv) {
              DateTimeStrFormat("%H:%M:%S", nRequestTime / 1000000), id);
 
     // Make sure not to reuse time indexes to keep things in the same order
+    //6. 确保不要重用时间索引，保证事件在相同的顺序
     int64_t nNow = GetTimeMicros() - 1000000;
-    static int64_t nLastTime;
+    static int64_t nLastTime;       //局部静态变量
     ++nLastTime;
     nNow = std::max(nNow, nLastTime);
-    nLastTime = nNow;
+    nLastTime = nNow;       //更新局部静态变量
 
-    // Each retry is 2 minutes after the last
+    // Each retry is 2 minutes after the last 每次重新尝试请求，要在上一次请求两分钟之后。
+    //7. 此处是更新更这个交易的请求时间
     nRequestTime = std::max(nRequestTime + 2 * 60 * 1000000, nNow);
+    //8. 如果该请求已在准备请求的队列中，更新下一次请求的时间。
     if (it != mapAlreadyAskedFor.end()) {
         mapAlreadyAskedFor.update(it, nRequestTime);
     } else {
+        // 不在准备发送请求的队列中，向该队列中插入该交易
         mapAlreadyAskedFor.insert(std::make_pair(inv.hash, nRequestTime));
     }
+    //9. 同时向节点的状态中，插入该信息。
     mapAskFor.insert(std::make_pair(nRequestTime, inv));
 }
 
+//查看该接待是否还处于链接状态；
 bool CConnman::NodeFullyConnected(const CNode *pnode) {
     return pnode && pnode->fSuccessfullyConnected && !pnode->fDisconnect;
 }
 
+// 节点
 void CConnman::PushMessage(CNode *pnode, CSerializedNetMsg &&msg) {
     size_t nMessageSize = msg.data.size();
     size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;

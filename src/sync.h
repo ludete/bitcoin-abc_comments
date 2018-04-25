@@ -189,6 +189,7 @@ private:
 public:
     CSemaphore(int init) : value(init) {}
 
+    // 阻塞一个线程；当value值小于1时，让条件阻塞。否则，只是value递减。
     void wait() {
         boost::unique_lock<boost::mutex> lock(mutex);
         while (value < 1) {
@@ -197,6 +198,7 @@ public:
         value--;
     }
 
+    // 尝试去阻塞；如果值小于1，标识不可以被阻塞。
     bool try_wait() {
         boost::unique_lock<boost::mutex> lock(mutex);
         if (value < 1) return false;
@@ -204,6 +206,7 @@ public:
         return true;
     }
 
+    //唤醒一个被条件变量阻塞的线程。同时value自增一。
     void post() {
         {
             boost::unique_lock<boost::mutex> lock(mutex);
@@ -213,30 +216,36 @@ public:
     }
 };
 
-/** RAII-style semaphore lock */
+/** RAII-style semaphore lock
+ * RAII风格的信号量 锁
+ * */
 class CSemaphoreGrant {
 private:
     CSemaphore *sem;
-    bool fHaveGrant;
+    bool fHaveGrant;        //已被阻塞，为true; 否则，为false。
 
 public:
+    // 去阻塞
     void Acquire() {
         if (fHaveGrant) return;
-        sem->wait();
-        fHaveGrant = true;
+        sem->wait();        //去阻塞
+        fHaveGrant = true;  //标识已被阻塞。
     }
 
+    // 去释放
     void Release() {
         if (!fHaveGrant) return;
         sem->post();
         fHaveGrant = false;
     }
 
+    // 尝试去阻塞
     bool TryAcquire() {
         if (!fHaveGrant && sem->try_wait()) fHaveGrant = true;
         return fHaveGrant;
     }
 
+    // move语义
     void MoveTo(CSemaphoreGrant &grant) {
         grant.Release();
         grant.sem = sem;

@@ -56,7 +56,7 @@ struct LockPoints;
 
 /** Default for DEFAULT_WHITELISTRELAY. */
 static const bool DEFAULT_WHITELISTRELAY = true;
-/** Default for DEFAULT_WHITELISTFORCERELAY. */
+/** Default for DEFAULT_WHITELISTFORCERELAY.   WHITE LIST FORCE RELAY 白名单强制中继的列表（来自该节点的正确信息，需要被强行中继）   */
 static const bool DEFAULT_WHITELISTFORCERELAY = true;
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
 static const Amount DEFAULT_MIN_RELAY_TX_FEE(1000);
@@ -708,6 +708,7 @@ int32_t ComputeBlockVersion(const CBlockIndex *pindexPrev,
  * Reject codes greater or equal to this can be returned by AcceptToMemPool for
  * transactions, to signal internal conditions. They cannot and should not be
  * sent over the P2P network.
+ * 由AcceptToMemPool 返回的交易状态码 大于或等于该值，去触发内部条件。他们不能也不应该发送至p2p 网络
  */
 static const unsigned int REJECT_INTERNAL = 0x100;
 /** Too high fee. Can not be triggered by P2P transactions */

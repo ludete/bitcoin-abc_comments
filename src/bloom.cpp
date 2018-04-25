@@ -224,7 +224,9 @@ CRollingBloomFilter::CRollingBloomFilter(unsigned int nElements,
     reset();
 }
 
-/* Similar to CBloomFilter::Hash */
+/* Similar to CBloomFilter::Hash
+ * 获取bloom过滤器 关于该值的哈希
+ * */
 static inline uint32_t
 RollingBloomHash(unsigned int nHashNum, uint32_t nTweak,
                  const std::vector<uint8_t> &vDataToHash) {
@@ -268,25 +270,33 @@ void CRollingBloomFilter::insert(const uint256 &hash) {
     insert(vData);
 }
 
+//查看指定的数据是否存在于 过滤器中。
 bool CRollingBloomFilter::contains(const std::vector<uint8_t> &vKey) const {
     for (int n = 0; n < nHashFuncs; n++) {
+        //1. 获取键值对应的bloom过滤器的 值。
         uint32_t h = RollingBloomHash(n, nTweak, vKey);
+        //2. 获取该值的bit位
         int bit = h & 0x3F;
+        //3. 获取位置
         uint32_t pos = (h >> 6) % data.size();
         /* If the relevant bit is not set in either data[pos & ~1] or data[pos |
          * 1], the filter does not contain vKey */
+        //4. 过滤器不包含该键，则返回false
         if (!(((data[pos & ~1] | data[pos | 1]) >> bit) & 1)) {
             return false;
         }
     }
+    //5. 返回true.
     return true;
 }
 
+// 查看该哈希是否存在于 滚动bloom过滤器中
 bool CRollingBloomFilter::contains(const uint256 &hash) const {
     std::vector<uint8_t> vData(hash.begin(), hash.end());
     return contains(vData);
 }
 
+//重置 bloom过滤器
 void CRollingBloomFilter::reset() {
     nTweak = GetRand(std::numeric_limits<unsigned int>::max());
     nEntriesThisGeneration = 0;

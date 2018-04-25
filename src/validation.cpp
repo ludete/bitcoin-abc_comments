@@ -660,6 +660,7 @@ void LimitMempoolSize(CTxMemPool &pool, size_t limit, unsigned long age) {
 
     std::vector<COutPoint> vNoSpendsRemaining;
     pool.TrimToSize(limit, &vNoSpendsRemaining);
+    // 将这些被移除的输出从 UTXO的缓存中移除
     for (const COutPoint &removed : vNoSpendsRemaining) {
         pcoinsTip->Uncache(removed);
     }
@@ -734,19 +735,24 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction &tx,
 
     //mempool 中不含有coinbase交易
     assert(!tx.IsCoinBase());
+
+    //1. 遍历该交易的所有输入，从UTXO集合中获取它的coin，判断这些coin是否可以花费。
     for (const CTxIn &txin : tx.vin) {
+        //2. 从view中获取它所有的引用输出coin。
         const Coin &coin = view.AccessCoin(txin.prevout);
 
         // At this point we haven't actually checked if the coins are all
         // available (or shouldn't assume we have, since CheckInputs does). So
         // we just return failure if the inputs are not available here, and then
         // only have to check equivalence for available inputs.
+        //
         if (coin.IsSpent()) {
             return false;
         }
 
+        //3. 查看该交易的引用输出是否存在于mempool;
         const CTransactionRef &txFrom = pool.get(txin.prevout.hash);
-        //如果该交易存在于交易池中
+        //4. 如果该交易存在于交易池中, 那么它必须与mempool中的信息相等。
         if (txFrom) {
             assert(txFrom->GetHash() == txin.prevout.hash);
             assert(txFrom->vout.size() > txin.prevout.n);
@@ -875,7 +881,10 @@ static bool AcceptToMemoryPoolWorker(
                 if (!pcoinsTip->HaveCoinInCache(txin.prevout)) {
                     coins_to_uncache.push_back(txin.prevout);
                 }
-                //2. 如果UTXO集合 与 交易池中 都不存在该引用输出。
+                //2. 如果UTXO集合 与 交易池中 都不存在该引用输出，此时会抛弃这个交易。
+                // HaveCoin()函数的操作，1. 假如此时该交易依赖的是未确认的交易，那么会去交易池查看依赖的交易是否存在，
+                // 2. 如果存在，构建这个引用输出的coin，然后将它添加到临时对象的 内存哈希表中；
+                // 3. 此时存储的coin数据，会在后面对交易进行脚本验证时，可以直接使用。
                 if (!view.HaveCoin(txin.prevout)) {
                     // 对传出参数赋值，标识该笔交易有未找到的交易输入存在；即引用输出不存在与本节点的UTXO集合中
                     if (pfMissingInputs) {
@@ -1096,6 +1105,8 @@ static bool AcceptToMemoryPoolWorker(
         //  继续检查该交易，不符合，同进入样不让进入 交易池。
         uint32_t currentBlockScriptVerifyFlags =
             GetBlockScriptFlags(chainActive.Tip(), config);
+        // 从mempool 和 UTXO集合两个方面去检查一个新来的将要准备mempool的交易。
+        // 此时依赖于mempool中未确认的交易已经进入了UTXO的缓存中
         if (!CheckInputsFromMempoolAndCache(tx, state, view, pool,
                                             currentBlockScriptVerifyFlags, true,
                                             txdata)) {
@@ -1126,7 +1137,7 @@ static bool AcceptToMemoryPoolWorker(
         // This transaction should only count for fee estimation if
         // the node is not behind and it is not dependent on any other
         // transactions in the mempool.
-        //只有当节点不在后面，该交易才可以用来估算费用，并且它不依赖于交易池中的其他交易。
+        // 只有当节点不在后面，该交易才可以用来估算费用，并且它不依赖于交易池中的其他交易。
         // ture : 标识当前链可以用来预估交易，且这个交易不依赖于交易池中的其他交易。
         bool validForFeeEstimation =
             IsCurrentForFeeEstimation() && pool.HasNoInputsOf(tx);
@@ -1488,8 +1499,7 @@ static void InvalidChainFound(CBlockIndex *pindexNew) {
 static void InvalidBlockFound(CBlockIndex *pindex,
                               const CValidationState &state) {
     if (!state.CorruptionPossible()) {
-        pindex->nStatus |= BLOCK_\
- ]FAILED_VALID;
+        pindex->nStatus |= BLOCK_FAILED_VALID;
         setDirtyBlockIndex.insert(pindex);
         setBlockIndexCandidates.erase(pindex);
         InvalidChainFound(pindex);
@@ -1613,7 +1623,7 @@ bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
 }
 } // namespace Consensus
 
-//检查一个所有的交易输入
+//检查一个所有的交易输入；此时会进行脚本验证。
 //tx(in):检查的交易；state(out):检查后的状态；inputs(in):存储该交易的引用输出的UTXO数据，
 //检查脚本(默认TRUE)；验证标识(默认为标准检查)；签名缓存；脚本缓存；txdata(in):计算参一的各类哈希
 bool CheckInputs(const CTransaction &tx, CValidationState &state,
@@ -1622,11 +1632,11 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
                  const PrecomputedTransactionData &txdata,
                  std::vector<CScriptCheck> *pvChecks) {
     assert(!tx.IsCoinBase());
-    //检查交易输入
+    //1. 仅检查交易的金额
     if (!Consensus::CheckTxInputs(tx, state, inputs, GetSpendHeight(inputs))) {
         return false;
     }
-    // 存储该交易的所有验证条件。
+    //2. 存储该交易的所有进行脚本验证时的对象。
     if (pvChecks) {
         pvChecks->reserve(tx.vin.size());
     }
@@ -1640,6 +1650,7 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
     // block merkle hashes are still computed and checked, of course, if an
     // assumed valid block is invalid due to false scriptSigs this optimization
     // would allow an invalid chain to be accepted.
+    //3. 如果不需要进行脚本检查，此时就可以退出了。
     if (!fScriptChecks) {
         return true;
     }
@@ -1653,6 +1664,7 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
         return true;
     }
 
+    //4. 遍历该交易的所有交易输入，验证所有的交易输入签名是否正确。
     for (size_t i = 0; i < tx.vin.size(); i++) {
         const COutPoint &prevout = tx.vin[i].prevout;
         // 获取交易的某个交易输入的 引用输出的锁定脚本和金额
@@ -1707,7 +1719,7 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
         }
     }
 
-    // 将该交易哈希放入缓存中
+    // 如果需要将该交易存储在全局变量中，(这种情况只可能发生在一个新的交易要进入交易池时)
     if (scriptCacheStore && !pvChecks) {
         // We executed all of the provided scripts, and were told to cache the
         // result. Do so now.  我们执行所有提供的脚本，并把这些脚本对应的交易添加进缓存。
@@ -2739,6 +2751,7 @@ static bool DisconnectTip(const Config &config, CValidationState &state,
         return false;
     }
 
+    // 如果非裸露
     if (!fBare) {
         // Resurrect mempool transactions from the disconnected block.
         std::vector<uint256> vHashUpdate;
@@ -2746,11 +2759,13 @@ static bool DisconnectTip(const Config &config, CValidationState &state,
             const CTransaction &tx = *it;
             // ignore validation errors in resurrected transactions
             CValidationState stateDummy;
+            // 对于coinbase交易(不可以进交易池)；或者这个撤销的块中的交易重新进mempool失败，递归删除它的所有后代交易。
             if (tx.IsCoinBase() ||
                 !AcceptToMemoryPool(config, mempool, stateDummy, it, false,
                                     nullptr, nullptr, true)) {
                 mempool.removeRecursive(tx, MemPoolRemovalReason::REORG);
             } else if (mempool.exists(tx.GetId())) {
+                // 如果该撤销块中的 交易再次成功进入mempool，将这些交易加入集合中。
                 vHashUpdate.push_back(tx.GetId());
             }
         }
@@ -2760,6 +2775,7 @@ static bool DisconnectTip(const Config &config, CValidationState &state,
         // UpdateTransactionsFromBlock finds descendants of any transactions in
         // this block that were added back and cleans up the mempool state.
         // 查找block中交易的所有后代交易，重新添加进mempool，并清理mempool中的状态。
+        // 更新这些再次进入mempool中的交易的状态
         mempool.UpdateTransactionsFromBlock(vHashUpdate);
     }
 

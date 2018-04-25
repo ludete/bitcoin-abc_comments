@@ -86,7 +86,9 @@ struct CMainSignals {
     boost::signals2::signal<void(const uint256 &)> UpdatedTransaction;
     /** Notifies listeners of a new active block chain. */
     boost::signals2::signal<void(const CBlockLocator &)> SetBestChain;      //ok
-    /** Notifies listeners about an inventory item being seen on the network. */
+    /** Notifies listeners about an inventory item being seen on the network.
+     * 通知监听者，感兴趣的事情已经在网络中出现了
+     * */
     boost::signals2::signal<void(const uint256 &)> Inventory;               //ok
     /** Tells listeners to broadcast their data. */
     boost::signals2::signal<void(int64_t nBestBlockTime, CConnman *connman)>

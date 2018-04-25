@@ -135,6 +135,7 @@ CInv::CInv() {
     hash.SetNull();
 }
 
+// 构建一个信息。typeIn(in):消息的类型(tx,block); hashIn(in):交易ID，或block ID。
 CInv::CInv(int typeIn, const uint256 &hashIn) {
     type = typeIn;
     hash = hashIn;
@@ -144,6 +145,7 @@ bool operator<(const CInv &a, const CInv &b) {
     return (a.type < b.type || (a.type == b.type && a.hash < b.hash));
 }
 
+//获取该条信息的命令
 std::string CInv::GetCommand() const {
     std::string cmd;
     if (type & MSG_EXT_FLAG) cmd.append("extblk-");
@@ -162,6 +164,7 @@ std::string CInv::GetCommand() const {
     }
 }
 
+//获取该条信息的基础信息；命令+哈希(交易ID或区块ID)
 std::string CInv::ToString() const {
     try {
         return strprintf("%s %s", GetCommand(), hash.ToString());

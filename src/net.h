@@ -54,7 +54,9 @@ static const int PING_INTERVAL = 2 * 60;
 static const int TIMEOUT_INTERVAL = 20 * 60;
 /** Run the feeler connection loop once every 2 minutes or 120 seconds. **/
 static const int FEELER_INTERVAL = 120;
-/** The maximum number of entries in an 'inv' protocol message */
+/** The maximum number of entries in an 'inv' protocol message
+ * 一个"INV"协议信息中最大的条目数量
+ * */
 static const unsigned int MAX_INV_SZ = 50000;
 /** The maximum number of new addresses to accumulate before announcing. */
 static const unsigned int MAX_ADDR_TO_SEND = 1000;
@@ -75,9 +77,13 @@ static const bool DEFAULT_UPNP = USE_UPNP;
 #else
 static const bool DEFAULT_UPNP = false;
 #endif
-/** The maximum number of entries in mapAskFor */
+/** The maximum number of entries in mapAskFor
+ * 在 mapAskFor 中最大的条目数量
+ * */
 static const size_t MAPASKFOR_MAX_SZ = MAX_INV_SZ;
-/** The maximum number of entries in setAskFor (larger due to getdata latency)*/
+/** The maximum number of entries in setAskFor (larger due to getdata latency)
+ * 在 setAskFor 中最大的条目数量
+ * */
 static const size_t SETASKFOR_MAX_SZ = 2 * MAX_INV_SZ;
 /** The maximum number of peer connections to maintain. */
 static const unsigned int DEFAULT_MAX_PEER_CONNECTIONS = 125;
@@ -127,6 +133,7 @@ struct CSerializedNetMsg {
     std::string command;
 };
 
+//一个TCP链接
 class CConnman {
 public:
     enum NumConnections {
@@ -173,7 +180,9 @@ public:
 
     template <typename Callable> void ForEachNode(Callable &&func) {
         LOCK(cs_vNodes);
+        // 遍历每个节点
         for (auto &&node : vNodes) {
+            // 如果节点处于链接状态，进行回调
             if (NodeFullyConnected(node)) func(node);
         }
     };
@@ -372,7 +381,7 @@ private:
     CCriticalSection cs_vOneShots;
     std::vector<std::string> vAddedNodes;
     CCriticalSection cs_vAddedNodes;
-    std::vector<CNode *> vNodes;
+    std::vector<CNode *> vNodes;        //存储该TCP链接的所有节点
     std::list<CNode *> vNodesDisconnected;
     mutable CCriticalSection cs_vNodes;
     std::atomic<NodeId> nLastNodeId;
@@ -431,19 +440,20 @@ struct CombinerAll {
     }
 };
 
-// Signals for message handling
+// Signals for message handling;
+// 来自信息的处理
 struct CNodeSignals {
     boost::signals2::signal<bool(const Config &, CNode *, CConnman &,
                                  std::atomic<bool> &),
                             CombinerAll>
-        ProcessMessages;
+        ProcessMessages;        // 处理信息
     boost::signals2::signal<bool(const Config &, CNode *, CConnman &,
                                  std::atomic<bool> &),
                             CombinerAll>
-        SendMessages;
+        SendMessages;           // 发送信息
     boost::signals2::signal<void(const Config &, CNode *, CConnman &)>
-        InitializeNode;
-    boost::signals2::signal<void(NodeId, bool &)> FinalizeNode;
+        InitializeNode;         // 初始化
+    boost::signals2::signal<void(NodeId, bool &)> FinalizeNode;     //最终的节点
 };
 
 CNodeSignals &GetNodeSignals();
@@ -576,7 +586,9 @@ public:
     int readData(const char *pch, unsigned int nBytes);
 };
 
-/** Information about a peer */
+/** Information about a peer
+ * 一个节点的信息
+ * */
 class CNode {
     friend class CConnman;
 
@@ -584,7 +596,7 @@ public:
     // socket
     std::atomic<ServiceFlags> nServices;
     ServiceFlags nServicesExpected;
-    SOCKET hSocket;
+    SOCKET hSocket;         //每个节点的 socket 描述符
     // Total size of all vSendMsg entries.
     size_t nSendSize;
     // Offset inside the first vSendMsg already sent.
@@ -592,7 +604,7 @@ public:
     uint64_t nSendBytes;
     std::deque<std::vector<uint8_t>> vSendMsg;
     CCriticalSection cs_vSend;
-    CCriticalSection cs_hSocket;
+    CCriticalSection cs_hSocket;        //用于保护socket的锁；
     CCriticalSection cs_vRecv;
 
     CCriticalSection cs_vProcessMsg;
@@ -601,7 +613,7 @@ public:
 
     CCriticalSection cs_sendProcessing;
 
-    std::deque<CInv> vRecvGetData;
+    std::deque<CInv> vRecvGetData;      // 节点的接受信息
     uint64_t nRecvBytes;
     std::atomic<int> nRecvVersion;
 
@@ -620,6 +632,7 @@ public:
     // Used for both cleanSubVer and strSubVer.
     CCriticalSection cs_SubVer;
     // This peer can bypass DoS banning.
+    // 对等节点可以绕过DOS禁止。 是否启用白名单，true：启用。 false：禁用
     bool fWhitelisted;
     // If true this node is being used as a short lived feeler.
     bool fFeeler;
@@ -627,8 +640,8 @@ public:
     bool fAddnode;
     bool fClient;
     const bool fInbound;
-    std::atomic_bool fSuccessfullyConnected;
-    std::atomic_bool fDisconnect;
+    std::atomic_bool fSuccessfullyConnected;        // 节点是否处于成功的链接状态
+    std::atomic_bool fDisconnect;                   // 该节点是否断开链接
     // We use fRelayTxes for two purposes -
     // a) it allows us to not relay tx invs before receiving the peer's version
     // message.
@@ -641,11 +654,12 @@ public:
     CSemaphoreGrant grantOutbound;
     CCriticalSection cs_filter;
     CBloomFilter *pfilter;
-    std::atomic<int> nRefCount;
-    const NodeId id;
+    std::atomic<int> nRefCount;     // 引用计数
+    const NodeId id;                // 节点ID
 
     const uint64_t nKeyedNetGroup;
     std::atomic_bool fPauseRecv;
+    // 存储bool值，当发送缓冲区满时，为true，停止继续往发送缓冲区放数据，同时停止解析接收的数据(因为解析完数据，需要进行处理，并进行应答)
     std::atomic_bool fPauseSend;
 
 protected:
@@ -656,7 +670,7 @@ public:
     uint256 hashContinue;
     std::atomic<int> nStartingHeight;
 
-    // flood relay
+    // flood relay; 洪水中继
     std::vector<CAddress> vAddrToSend;
     CRollingBloomFilter addrKnown;
     bool fGetAddr;
@@ -664,21 +678,25 @@ public:
     int64_t nNextAddrSend;
     int64_t nNextLocalAddrSend;
 
-    // Inventory based relay.
+    // Inventory based relay. 基于库存的中继
     CRollingBloomFilter filterInventoryKnown;
     // Set of transaction ids we still have to announce. They are sorted by the
     // mempool before relay, so the order is not important.
-    std::set<uint256> setInventoryTxToSend;
+    // 待宣布的交易ID的集合。在中继之前，它们已被交易排序，所以本集合中的顺序是不重要的
+    std::set<uint256> setInventoryTxToSend;     //
     // List of block ids we still have announce. There is no final sorting
     // before sending, as they are always sent immediately and in the order
     // requested.
+    // 待宣布的块ID的列表。在发送之前没有最终的分类，因为他们总是立即
+    // 按照请求的顺序发送。
     std::vector<uint256> vInventoryBlockToSend;
     CCriticalSection cs_inventory;
-    std::set<uint256> setAskFor;
-    std::multimap<int64_t, CInv> mapAskFor;
+    std::set<uint256> setAskFor;            // 存储待处理的交易或块ID，向外进行广播
+    std::multimap<int64_t, CInv> mapAskFor; //存储
     int64_t nNextInvSend;
     // Used for headers announcements - unfiltered blocks to relay. Also
     // protected by cs_inventory.
+    // 用于块头公告，用于中继未过滤的块
     std::vector<uint256> vBlockHashesToAnnounce;
     // Used for BIP35 mempool sending, also protected by cs_inventory.
     bool fSendMempool;
@@ -687,8 +705,8 @@ public:
     std::atomic<int64_t> timeLastMempoolReq;
 
     // Block and TXN accept times
-    std::atomic<int64_t> nLastBlockTime;
-    std::atomic<int64_t> nLastTXTime;
+    std::atomic<int64_t> nLastBlockTime;    // 该节点 最后接收到区块的时间
+    std::atomic<int64_t> nLastTXTime;       // 该节点 最后接收到交易的时间
 
     // Ping time measurement:
     // The pong reply we're expecting, or 0 if no pong expected.
@@ -767,6 +785,7 @@ public:
         return this;
     }
 
+    // 标识该节点已释放了一个链接
     void Release() { nRefCount--; }
 
     void AddAddressKnown(const CAddress &_addr) {
@@ -787,18 +806,23 @@ public:
         }
     }
 
+    // 将该交易信息添加到 bloom过滤器中。
     void AddInventoryKnown(const CInv &inv) {
         LOCK(cs_inventory);
         filterInventoryKnown.insert(inv.hash);
     }
 
+    //向每个节点的仓库中push信息
     void PushInventory(const CInv &inv) {
         LOCK(cs_inventory);
+        // 如果推送的为交易信息
         if (inv.type == MSG_TX) {
+            // 如果中继器中不包含该交易，就将该交易添加到待发送集合中。
             if (!filterInventoryKnown.contains(inv.hash)) {
                 setInventoryTxToSend.insert(inv.hash);
             }
         } else if (inv.type == MSG_BLOCK) {
+            // 如果是块的类型，将这个块添加进待发送的集合。
             vInventoryBlockToSend.push_back(inv.hash);
         }
     }

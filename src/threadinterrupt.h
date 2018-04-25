@@ -14,10 +14,13 @@
  * A helper class for interruptible sleeps. Calling operator() will interrupt
  * any current sleep, and after that point operator bool() will return true
  * until reset.
+ * 一个辅助类，去中断睡眠。调用重载的()操作符，将打断任何当前的休眠。并且在这个打断点之后，
+ * 操作重载的bool运算符，返回是否被设置
  */
 class CThreadInterrupt {
 public:
     explicit operator bool() const;
+    // 通过内部的条件变量，唤醒所有的睡眠线程；
     void operator()();
     void reset();
     bool sleep_for(std::chrono::milliseconds rel_time);

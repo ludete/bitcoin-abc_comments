@@ -830,7 +830,7 @@ static UniValue signrawtransaction(const Config &config,
     }
 
     // mergedTx will end up with all the signatures; it starts as a clone of the
-    // rawtx:
+    // rawtx:  接收到的要签名的交易。
     CMutableTransaction mergedTx(txVariants[0]);
 
     // Fetch previous transactions (inputs):
@@ -843,12 +843,14 @@ static UniValue signrawtransaction(const Config &config,
         // Temporarily switch cache backend to db+mempool view.
         view.SetBackend(viewMempool);
 
+        //1. 获取该交易的所有引用输入，将这些引用输入写入临时对象的 哈希表中; 已被下面使用
         for (const CTxIn &txin : mergedTx.vin) {
             // Load entries from viewChain into view; can fail.
             view.AccessCoin(txin.prevout);
         }
 
         // Switch back to avoid locking mempool for too long.
+        // 切换后端，避免锁死mempool很长时间。 此时view的缓存表中已经含有了数据
         view.SetBackend(viewDummy);
     }
 
@@ -884,6 +886,8 @@ static UniValue signrawtransaction(const Config &config,
     if (request.params.size() > 1 && !request.params[1].isNull()) {
         UniValue prevTxs = request.params[1].get_array();
         for (size_t idx = 0; idx < prevTxs.size(); idx++) {
+
+            //1. 获取引用的交易
             const UniValue &p = prevTxs[idx];
             if (!p.isObject()) {
                 throw JSONRPCError(RPC_DESERIALIZATION_ERROR,
@@ -891,8 +895,8 @@ static UniValue signrawtransaction(const Config &config,
                                    "{\"txid'\",\"vout\",\"scriptPubKey\"}");
             }
 
+            //2. 获取引用输出
             UniValue prevOut = p.get_obj();
-
             RPCTypeCheckObj(prevOut,
                             {
                                 {"txid", UniValueType(UniValue::VSTR)},
@@ -903,21 +907,24 @@ static UniValue signrawtransaction(const Config &config,
                                 // not accepting quoted numerics
                                 // (which are valid JSON)
                             });
-
+            //3. 获取交易哈希
             uint256 txid = ParseHashO(prevOut, "txid");
-
+            //4. 获取花费该交易的输出索引
             int nOut = find_value(prevOut, "vout").get_int();
             if (nOut < 0) {
                 throw JSONRPCError(RPC_DESERIALIZATION_ERROR,
                                    "vout must be positive");
             }
-
+            //5. 组装一个引用输出的对象，用来去临时的UTXO中做key去查询。
             COutPoint out(txid, nOut);
+            //6. 获取该输出的锁定脚本。
             std::vector<uint8_t> pkData(ParseHexO(prevOut, "scriptPubKey"));
             CScript scriptPubKey(pkData.begin(), pkData.end());
 
             {
+                //7. 去临时的UTXO集合中查找该引用输出。
                 const Coin &coin = view.AccessCoin(out);
+                //8. 判断该out 在UTXO中的币是否可以花费，且脚本是否与给定的相同；不相同，直接报错。
                 if (!coin.IsSpent() &&
                     coin.GetTxOut().scriptPubKey != scriptPubKey) {
                     std::string err("Previous output scriptPubKey mismatch:\n");
@@ -926,9 +933,10 @@ static UniValue signrawtransaction(const Config &config,
                     throw JSONRPCError(RPC_DESERIALIZATION_ERROR, err);
                 }
 
+                //拼装一个交易输出对象。
                 CTxOut txout;
-                txout.scriptPubKey = scriptPubKey;
-                txout.nValue = 0;
+                txout.scriptPubKey = scriptPubKey;      //脚本为上述查到的脚本。
+                txout.nValue = 0;                       //金额(默认为0，此处应该可以优化，因为上步已经从UTXO集合中查到了该out对应的coin，它包含金额，此时可以直接赋值的。)
                 if (prevOut.exists("amount")) {
                     txout.nValue =
                         AmountFromValue(find_value(prevOut, "amount"));
@@ -942,9 +950,13 @@ static UniValue signrawtransaction(const Config &config,
                     // because our own dogfood (our rpc results) always
                     // produces decimal numbers that are quoted
                     // eg getbalance returns "3.14152" rather than 3.14152
+                    // 金额参数在重放保护的交易中是必须的。注意：我们必须在这里检查它的存在。
+                    // 因为UniValue::VNUM解析器不能正确的解析带引号的数字。而且我们必须接收
+                    // 带引号的数字，因为我们的RPC结果总是产生十进制的数字。
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "Missing amount");
                 }
 
+                // 添加这个
                 view.AddCoin(out, Coin(txout, 1, false), true);
             }
 

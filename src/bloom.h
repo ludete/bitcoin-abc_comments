@@ -140,9 +140,9 @@ private:
     int nEntriesPerGeneration;
     int nEntriesThisGeneration;
     int nGeneration;
-    std::vector<uint64_t> data;
+    std::vector<uint64_t> data;     //bloom 过期存储的数据
     unsigned int nTweak;
-    int nHashFuncs;
+    int nHashFuncs;     //bloom过滤器中存储的哈希个数。
 };
 
 #endif // BITCOIN_BLOOM_H

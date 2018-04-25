@@ -12,7 +12,7 @@
 class Config;
 
 /** Default for -maxorphantx, maximum number of orphan transactions kept in
- * memory  交易池中最大的孤儿交易的数量  */
+ * memory  本客户端默认的最大存储孤儿交易的数量  */
 static const unsigned int DEFAULT_MAX_ORPHAN_TRANSACTIONS = 100;
 /** Expiration time for orphan transactions in seconds */
 static const int64_t ORPHAN_TX_EXPIRE_TIME = 20 * 60;
@@ -57,7 +57,9 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats);
 /** Increase a node's misbehavior score. */
 void Misbehaving(NodeId nodeid, int howmuch, const std::string &reason);
 
-/** Process protocol messages received from a given node */
+/** Process protocol messages received from a given node
+ * 处理从一个节点接收到的协议信息。
+ * */
 bool ProcessMessages(const Config &config, CNode *pfrom, CConnman &connman,
                      const std::atomic<bool> &interrupt);
 /**

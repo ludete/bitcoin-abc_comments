@@ -29,7 +29,7 @@ private:
     int nDoS;
     std::string strRejectReason;
     unsigned int chRejectCode;
-    bool corruptionPossible;
+    bool corruptionPossible;        //出错可能
     std::string strDebugMessage;
 
 public:
@@ -71,7 +71,9 @@ public:
     bool IsValid() const { return mode == MODE_VALID; }
     bool IsInvalid() const { return mode == MODE_INVALID; }
     bool IsError() const { return mode == MODE_ERROR; }
+    // 返回状态是否为无效状态； true：则为无效状态； false：为有效状态
     bool IsInvalid(int &nDoSOut) const {
+        // 如果为无效状态，获取它的DOS状态码
         if (IsInvalid()) {
             nDoSOut = nDoS;
             return true;
@@ -79,6 +81,7 @@ public:
         return false;
     }
 
+    //返回是否出错。
     bool CorruptionPossible() const { return corruptionPossible; }
     void SetCorruptionPossible() { corruptionPossible = true; }
     unsigned int GetRejectCode() const { return chRejectCode; }
