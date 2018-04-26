@@ -610,6 +610,7 @@ public:
      * of the initial stack. This allows outputs to be pruned instantly when
      * entering the UTXO set.
      */
+    // 判断还脚本是否为 不可以花费的脚本。 是：true； 否则：false。
     bool IsUnspendable() const {
         return (size() > 0 && *begin() == OP_RETURN) ||
                (size() > MAX_SCRIPT_SIZE);

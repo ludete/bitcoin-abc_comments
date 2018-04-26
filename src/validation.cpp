@@ -230,8 +230,8 @@ CBlockTreeDB *pblocktree = nullptr;
 enum FlushStateMode {
     FLUSH_STATE_NONE,
     FLUSH_STATE_IF_NEEDED,
-    FLUSH_STATE_PERIODIC,
-    FLUSH_STATE_ALWAYS
+    FLUSH_STATE_PERIODIC,           //定期刷新数据到磁盘
+    FLUSH_STATE_ALWAYS              //
 };
 
 // See definition for documentation
@@ -552,11 +552,13 @@ uint64_t GetTransactionSigOpCount(const CTransaction &tx,
     return nSigOps;
 }
 
-//检查交易的公共部分
+//检查交易的公共部分, 检查一个交易的格式，不依赖于上下文。
+//tx(in):将检查的交易； state(out):检查的状态；fCheckDuplicateInputs(in):检查一个交易是否重复引用了同一个输出(true:检查；false:不检查)。
 static bool CheckTransactionCommon(const CTransaction &tx,
                                    CValidationState &state,
                                    bool fCheckDuplicateInputs) {
     // Basic checks that don't depend on any context
+    //1. 交易输入，输出不允许为空
     if (tx.vin.empty()) {
         return state.DoS(10, false, REJECT_INVALID, "bad-txns-vin-empty");
     }
@@ -566,11 +568,13 @@ static bool CheckTransactionCommon(const CTransaction &tx,
     }
 
     // Size limit
+    //2. 交易字节限制。一个交易最大1M左右字节。
     if (::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION) > MAX_TX_SIZE) {
         return state.DoS(100, false, REJECT_INVALID, "bad-txns-oversize");
     }
 
     // Check for negative or overflow output values
+    //3. 交易金额限制检查
     Amount nValueOut = 0;
     for (const auto &txout : tx.vout) {
         if (txout.nValue < 0) {
@@ -590,12 +594,14 @@ static bool CheckTransactionCommon(const CTransaction &tx,
         }
     }
 
+    //4. 脚本操作码限制检查
     if (GetSigOpCountWithoutP2SH(tx) > MAX_TX_SIGOPS_COUNT) {
         return state.DoS(100, false, REJECT_INVALID, "bad-txn-sigops");
     }
 
     // Check for duplicate inputs - note that this check is slow so we skip it
     // in CheckBlock
+    //5. 重复引用输出检查
     if (fCheckDuplicateInputs) {
         std::set<COutPoint> vInOutPoints;
         for (const auto &txin : tx.vin) {
@@ -628,18 +634,22 @@ bool CheckCoinbase(const CTransaction &tx, CValidationState &state,
     return true;
 }
 
-//检查普通的的交易；
+//检查非coinbase 的交易；此处会检查交易的格式，各字段是否合规。不依赖于上下文
+//tx(in):将检查的交易； state(out):该交易的检查状态；fCheckDuplicateInputs(in):检查一个交易是否重复引用了同一个输出(true:检查；false:不检查)。
 bool CheckRegularTransaction(const CTransaction &tx, CValidationState &state,
                              bool fCheckDuplicateInputs) {
+    //1. 如果传入的交易是coinbase交易，直接报错
     if (tx.IsCoinBase()) {
         return state.DoS(100, false, REJECT_INVALID, "bad-tx-coinbase");
     }
 
+    //2. 检查交易
     if (!CheckTransactionCommon(tx, state, fCheckDuplicateInputs)) {
         // CheckTransactionCommon fill in the state.
         return false;
     }
 
+    //3. 检查交易的所有引用输出，有任何一个为空，就报错。
     for (const auto &txin : tx.vin) {
         if (txin.prevout.IsNull()) {
             return state.DoS(10, false, REJECT_INVALID,
@@ -758,7 +768,7 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction &tx,
             assert(txFrom->vout.size() > txin.prevout.n);
             assert(txFrom->vout[txin.prevout.n] == coin.GetTxOut());
         } else {
-        //交易存在于
+        //交易存在于UTXO
             const Coin &coinFromDisk = pcoinsTip->AccessCoin(txin.prevout);
             assert(!coinFromDisk.IsSpent());
             assert(coinFromDisk.GetTxOut() == coin.GetTxOut());
@@ -772,6 +782,8 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction &tx,
 //向交易池中添加一个交易
 //接收交易池工作者； pool(in)：交易池; state(out):状态；ptx(in):交易
 //pfMissingInputs(out):标识该笔交易有未找到的交易输入存在；即引用输出不存在于本节点的UTXO集合中
+//coins_to_uncache(out): 存储以添加交易作为输出的coin，该coin不存在于UTXO集合中，但存在于交易池中。
+//fLimitFree(in):限制低交易费的交易中继速度。  nAbsurdFee(in):不合理的交易费，主要用来检查是否一个交易支付了过高的交易费。
 static bool AcceptToMemoryPoolWorker(
     const Config &config, CTxMemPool &pool, CValidationState &state,
     const CTransactionRef &ptx, bool fLimitFree, bool *pfMissingInputs,
@@ -787,14 +799,16 @@ static bool AcceptToMemoryPoolWorker(
         *pfMissingInputs = false;
     }
 
-    //1. Coinbase is only valid in a block, not as a loose transaction.； 检查普通的交易
+    //1. Coinbase is only valid in a block, not as a loose transaction.；
+    // coinbase不允许进入交易池，不允许作为单个交易在网络上传播；
+    // 此处对交易格式进行检查。
     if (!CheckRegularTransaction(tx, state, true)) {
         // state filled in by CheckRegularTransaction.
         return false;
     }
 
     //2. Rather not work on nonstandard transactions (unless -testnet/-regtest)
-    // 继续进行标准交易的检查
+    // 继续进行标准交易的检查; 对脚本格式和脚本字节数进行检查。
     std::string reason;
     if (fRequireStandard && !IsStandardTx(tx, reason)) {
         return state.DoS(0, false, REJECT_NONSTANDARD, reason);
@@ -803,8 +817,10 @@ static bool AcceptToMemoryPoolWorker(
     // Only accept nLockTime-using transactions that can be mined in the next
     // block; we don't want our mempool filled up with transactions that can't
     // be mined yet.
+    // 对于设置了锁定时间戳的交易，只接收可以在下一个块中被打包的交易。我们不想让我们的交易池充满不可以被打包的交易。
     //3. 只接受可以打包的交易，还是进行交易的检查
     CValidationState ctxState;
+    // 检查交易是否为成熟交易，非成熟交易不允许进入交易池。
     if (!ContextualCheckTransactionForCurrentBlock(
             config, tx, ctxState, config.GetChainParams().GetConsensus(),
             STANDARD_LOCKTIME_VERIFY_FLAGS)) {
@@ -827,7 +843,7 @@ static bool AcceptToMemoryPoolWorker(
         // Protect pool.mapNextTx
         LOCK(pool.cs);
         //即该交易的引用输出已被交易池中的其它交易使用；
-        // 5. 查看该交易是否与交易池中的其他交易 使用了相同的引用输出。
+        // 5. 查看该交易是否与交易池中的其他交易 使用了相同的引用输出。这些输出来自两个方向(UTXO, mempool)
         for (const CTxIn &txin : tx.vin) {
             auto itConflicting = pool.mapNextTx.find(txin.prevout);
             if (itConflicting != pool.mapNextTx.end()) {
@@ -866,7 +882,7 @@ static bool AcceptToMemoryPoolWorker(
                         //如果该UTXO不存在于UTXO集合中，但是存在于交易池中，将它添加到 传出变量中。
                         coins_to_uncache.push_back(outpoint);
                     }
-                    // 标识该交易已经被确认(存在于UTXO集合中) 或 已在交易池中被其他交易引用(即：已存在与交易池中)
+                    // 标识该交易已经被确认(存在于UTXO集合) 或 已在交易池中(即：已存在与交易池中)
                     return state.Invalid(false, REJECT_ALREADY_KNOWN,
                                          "txn-already-known");
                 }
@@ -907,12 +923,12 @@ static bool AcceptToMemoryPoolWorker(
             // Bring the best block into scope. 将最好的块带入范围
             view.GetBestBlock();
 
-            //获取该交易的所有 交易输入金额
+            //9. 获取该交易的所有 交易输入金额
             nValueIn = view.GetValueIn(tx); //返回一个交易在本节点的UTXO集合中的输入总金额，
 
             // We have all inputs cached now, so switch back to dummy, so we
             // don't need to keep lock on mempool.
-            //切换后端，不要一直锁定交易池； 此时刚才查找的所有交易，都已写入临时view的缓存中
+            //10. 切换后端，不要一直锁定交易池； 此时刚才查找的所有交易，都已写入临时view的缓存中
             view.SetBackend(dummy);
 
             // Only accept BIP68 sequence locked transactions that can be mined
@@ -1074,9 +1090,9 @@ static bool AcceptToMemoryPoolWorker(
 
         // Check against previous transactions. This is done last to help
         // prevent CPU exhaustion denial-of-service attacks.
-        //检查以前的交易。可以保护CPU免遭拒绝服务攻击。
+        // 检查以前的交易。可以保护CPU免遭拒绝服务攻击。
         PrecomputedTransactionData txdata(tx);
-        //16. 检查所有的交易输入， 不符合，同样不允许进入交易池
+        //16. 检查所有的交易输入，并验证签名。
         if (!CheckInputs(tx, state, view, true, scriptVerifyFlags, true, false,
                          txdata)) {
             // State filled in by CheckInputs.
@@ -1089,20 +1105,22 @@ static bool AcceptToMemoryPoolWorker(
         // because the cache tracks script flags for us it will auto-invalidate
         // and we'll just have a few blocks of extra misses on soft-fork
         // activation.
-        // 再次检查当前链的Tip脚本验证标识，并更新我们的脚本验证标识。 当然，如果接下来的块与以
-        // 前的块标识不同，将会失败。但是缓存这个标识可以自动废止，仅有额外很少的块需要没有使用软分叉激活。
-        //
+        // 再次检查当前链的Tip脚本验证标识，并更新我们的脚本验证标识。
+        // 当然，如果下个块与以前的块有不同的脚本验证标识，这当然是没有太大用的。但是因为缓存跟踪了脚本标识，
+        // 它会自动失效，并且在软分叉激活中，仅有几个额外的区块会丢失。
         // This is also useful in case of bugs in the standard flags that cause
         // transactions to pass as valid when they're actually invalid. For
         // instance the STRICTENC flag was incorrectly allowing certain CHECKSIG
         // NOT scripts to pass, even though they were invalid.
+        // 在这个例子中也是有效的：如果标准的验证标识使本来无效的交易作为有效交易通过。例如：
+        // STRICTENC标识错误的允许CHECKSIGNOT脚本验证通过，即使这些脚本本来应该是无效的。
         //
         // There is a similar check in CreateNewBlock() to prevent creating
         // invalid blocks (using TestBlockValidity), however allowing such
         // transactions into the mempool can be exploited as a DoS attack.
-        // 在 CreateNewBlock一个新块中也有一个类似的检查，来阻止创建一个无效的块。因为
-        // 允许这样的交易进入交易池将会造成一个类似的DOS攻击。
-        //  继续检查该交易，不符合，同进入样不让进入 交易池。
+        // 在 CreateNewBlock创建一个新块时也有一个类似的检查，来阻止创建一个无效的块(通过调用
+        // TestBlockValidity)。因为允许这样的交易进入交易池将会造成一个类似的DOS攻击。
+
         uint32_t currentBlockScriptVerifyFlags =
             GetBlockScriptFlags(chainActive.Tip(), config);
         // 从mempool 和 UTXO集合两个方面去检查一个新来的将要准备mempool的交易。
@@ -1165,6 +1183,10 @@ static bool AcceptToMemoryPoolWorker(
     return true;
 }
 
+// state(out):该交易在进交易池过程中的状态； tx(in):准备进交易池的交易；
+// fLimitFree(in):      pfMissingInputs(out):参四的交易是否在本节点中缺少它的 父交易，导致它进不了交易池。
+// plTxnReplaced(out):          fOverrideMempoolLimit(in):重写交易池的限制，默认为false；
+// nAbsurdFee(in):荒诞的交易费，默认为0.  nAcceptTime(in):接收到交易的时间
 static bool AcceptToMemoryPoolWithTime(
     const Config &config, CTxMemPool &pool, CValidationState &state,
     const CTransactionRef &tx, bool fLimitFree, bool *pfMissingInputs,
@@ -1173,12 +1195,13 @@ static bool AcceptToMemoryPoolWithTime(
 
 
     std::vector<COutPoint> coins_to_uncache;
-    // 将这个交易添加进交易池
+    //1. 将这个交易添加进交易池，增加了一个参数，拿到需要从缓存中去除的coin集合
     bool res = AcceptToMemoryPoolWorker(
         config, pool, state, tx, fLimitFree, pfMissingInputs, nAcceptTime,
         plTxnReplaced, fOverrideMempoolLimit, nAbsurdFee, coins_to_uncache);
     if (!res) {
-        // 如果添加失败，将该交易已在交易池中；将该交易中的花费的UTXO，从UTXO集合的缓存中删除；
+        // 如果添加失败，
+        // coins_to_uncache : 如果该交易涉及的UTXO不存在于UTXO集合中，但是存在于交易池中，将这些存储进该变量
         for (const COutPoint &outpoint : coins_to_uncache) {
             pcoinsTip->Uncache(outpoint);
         }
@@ -1186,18 +1209,23 @@ static bool AcceptToMemoryPoolWithTime(
 
     // After we've (potentially) uncached entries, ensure our coins cache is
     // still within its size limits
-    // 刷新数据到磁盘
+    //2. 刷新数据到磁盘
     CValidationState stateDummy;
     FlushStateToDisk(stateDummy, FLUSH_STATE_PERIODIC);
     return res;
 }
 
-// 将一个交易添加进交易池，可能添加失败
+// 将一个交易添加进交易池，可能添加失败，如果失败，返回false，同时参三中存储 失败的状态。参六中存储 是否由于缺少父交易导致的失败。
+// state(out):该交易在进交易池过程中的状态； tx(in):准备进交易池的交易；
+// fLimitFree(in):      pfMissingInputs(out):参四的交易是否在本节点中缺少它的 父交易，导致它进不了交易池。
+// plTxnReplaced(out):          fOverrideMempoolLimit(in):重写交易池的限制，默认为false；
+// nAbsurdFee(in):荒诞的交易费，默认为0.
 bool AcceptToMemoryPool(const Config &config, CTxMemPool &pool,
                         CValidationState &state, const CTransactionRef &tx,
                         bool fLimitFree, bool *pfMissingInputs,
                         std::list<CTransactionRef> *plTxnReplaced,
                         bool fOverrideMempoolLimit, const Amount nAbsurdFee) {
+    /// 此处只是添加了一个 接收到交易的 本地时间作为参数。
     return AcceptToMemoryPoolWithTime(config, pool, state, tx, fLimitFree,
                                       pfMissingInputs, GetTime(), plTxnReplaced,
                                       fOverrideMempoolLimit, nAbsurdFee);
@@ -1644,12 +1672,16 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
     // The first loop above does all the inexpensive checks. Only if ALL inputs
     // pass do we perform expensive ECDSA signature checks. Helps prevent CPU
     // exhaustion attacks.
+    // 上层的第一步循环做不昂贵检查。只有当所有的交易输入通过之后，才会执行昂贵的ECDSA签名检查。
+    // 帮助阻止CPU的衰竭攻击。
 
     // Skip script verification when connecting blocks under the assumedvalid
     // block. Assuming the assumedvalid block is valid this is safe because
     // block merkle hashes are still computed and checked, of course, if an
     // assumed valid block is invalid due to false scriptSigs this optimization
     // would allow an invalid chain to be accepted.
+    // 当链接一个假设有效的块时，跳过脚本验证。这种类型的块是安全的，因为block的merkle树被计算和检查。
+    // 当然，如果一个假设有效的区块由于错误的签名脚本导致无效，则本优化允许接收无效的链。
     //3. 如果不需要进行脚本检查，此时就可以退出了。
     if (!fScriptChecks) {
         return true;
@@ -1659,6 +1691,8 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
     // Note that this assumes that the inputs provided are correct (ie that the
     // transaction hash which is in tx's prevouts properly commits to the
     // scriptPubKey in the inputs view of that transaction).
+    // 首先检查脚本执行是否被缓存了相同的标志。注意：此处假设交易输入是正确的(即tx的prevout中的
+    // 交易哈希在该交易的输入视图中正确地提交给scriptPubKey)
     uint256 hashCacheEntry = GetScriptCacheKey(tx, flags);
     if (IsKeyInScriptCache(hashCacheEntry, !scriptCacheStore)) {
         return true;
@@ -1685,8 +1719,8 @@ bool CheckInputs(const CTransaction &tx, CValidationState &state,
                            txdata);
         if (pvChecks) {
             pvChecks->push_back(std::move(check));
-        } else if (!check()) {      //标准flag检查失败后，进入此处；
-            // 下面主要是用来判断非强制性脚本检查的状态，不管是否成功都退出。
+        } else if (!check()) {      //脚本检查失败后，进入此处；
+            // 下面主要是用来判断非强制性脚本检查的状态，不管是否成功都退出，并报告出错吗。
             //即当没有全局任务队列时，只有主线程验证所有的交易；
             if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
                 // Check whether the failure was caused by a non-mandatory
@@ -3595,6 +3629,7 @@ bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos,
     return true;
 }
 
+//检查块头的工作量
 bool CheckBlockHeader(const CBlockHeader &block, CValidationState &state,
                       const Consensus::Params &consensusParams,
                       bool fCheckPOW) {
@@ -3607,25 +3642,30 @@ bool CheckBlockHeader(const CBlockHeader &block, CValidationState &state,
     return true;
 }
 
-//检查块；block(in) 将要检查的块； state(out):检查后块的状态
+// 检查一个区块；上下文无关的有效性检查
+// block(in) 将要检查的块； state(out):检查后块的状态； 默认都会检查块的POW 和 merkle树。
 bool CheckBlock(const Config &config, const CBlock &block,
                 CValidationState &state,
                 const Consensus::Params &consensusParams, bool fCheckPOW,
                 bool fCheckMerkleRoot) {
     // These are checks that are independent of context.
+    //1. 这个块是否已检查
     if (block.fChecked) {
         return true;
     }
 
     // Check that the header is valid (particularly PoW).  This is mostly
     // redundant with the call in AcceptBlockHeader.
+    //2. 检查块头的有效性(特别是POW)。对于AcceptBlockHeader调用而言，大部分检查都是冗余的。
     if (!CheckBlockHeader(block, state, consensusParams, fCheckPOW)) {
         return false;
     }
 
     // Check the merkle root.
+    //3. 检查block的merkle树
     if (fCheckMerkleRoot) {
         bool mutated;
+        //3.1 重新生成该块的merkle树，判断与接收到的是否相等。
         uint256 hashMerkleRoot2 = BlockMerkleRoot(block, &mutated);
         if (block.hashMerkleRoot != hashMerkleRoot2) {
             return state.DoS(100, false, REJECT_INVALID, "bad-txnmrklroot",
@@ -3644,9 +3684,11 @@ bool CheckBlock(const Config &config, const CBlock &block,
     // All potential-corruption validation must be done before we do any
     // transaction validation, as otherwise we may mark the header as invalid
     // because we receive the wrong transactions for it.
-    // 所有潜在的错误验证必须在 交易验证之前做，这样就可以标识这个块头为无效，因为接收的这个块中包含无效的交易
+    // 所有潜在的错误验证必须在 进行任何交易验证之前完成，否则可能会将块头标识为无效，
+    // 因为接收的这个块中包含无效的交易。
 
     // First transaction must be coinbase.
+    // 4. 必须存在至少一个coinbase交易
     if (block.vtx.empty()) {
         return state.DoS(100, false, REJECT_INVALID, "bad-cb-missing", false,
                          "first tx is not coinbase");
@@ -3656,6 +3698,8 @@ bool CheckBlock(const Config &config, const CBlock &block,
     auto nMaxBlockSize = config.GetMaxBlockSize();
 
     // Bail early if there is no way this block is of reasonable size.
+    // 如果这个块没有合理的字节，尽早释放。
+    // 5. 区块的字节合理性检查：
     if ((block.vtx.size() * MIN_TRANSACTION_SIZE) > nMaxBlockSize) {
         return state.DoS(100, false, REJECT_INVALID, "bad-blk-length", false,
                          "size limits failed");
@@ -3669,7 +3713,7 @@ bool CheckBlock(const Config &config, const CBlock &block,
     }
 
     // And a valid coinbase.
-    // 验证coinbase交易的有效性
+    // 6. 验证coinbase交易的有效性
     if (!CheckCoinbase(*block.vtx[0], state, false)) {
         return state.Invalid(false, state.GetRejectCode(),
                              state.GetRejectReason(),
@@ -3687,6 +3731,7 @@ bool CheckBlock(const Config &config, const CBlock &block,
     auto *tx = block.vtx[0].get();
 
     size_t i = 0;
+    // 7. 进行交易的签名操作码，交易检查。不依赖于上下文
     while (true) {
         // Count the sigops for the current transaction. If the total sigops
         // count is too high, the the block is invalid.
@@ -3716,6 +3761,7 @@ bool CheckBlock(const Config &config, const CBlock &block,
         }
     }
 
+    // 8. 如果该块已经检查了pow和merkle Root, 设置块的标识位已检查。
     if (fCheckPOW && fCheckMerkleRoot) {
         block.fChecked = true;
     }
@@ -3838,6 +3884,9 @@ bool ContextualCheckTransactionForCurrentBlock(
     // scenario that would mean checking which rules would be enforced for the
     // next block and setting the appropriate flags. At the present time no
     // soft-forks are scheduled, so no flags are set.
+    //1. 按照惯例，对于负值的标识应该使用当前网络的强制共识规则。在未来的软分叉中，
+    // 在未来的软叉式场景中，这将意味着检查下一个块将执行哪些规则并设置适当的标志。
+    // 目前没有安排软叉，所以没有设置标志。
     flags = std::max(flags, 0);
 
     // ContextualCheckTransactionForCurrentBlock() uses chainActive.Height()+1
@@ -3846,6 +3895,7 @@ bool ContextualCheckTransactionForCurrentBlock(
     // is used. Thus if we want to know if a transaction can be part of the
     // *next* block, we need to call ContextualCheckTransaction() with one more
     // than chainActive.Height().
+    //2. 假设该交易在当前主链下一个块被打包。计算该块的高度。
     const int nBlockHeight = chainActive.Height() + 1;
 
     // BIP113 will require that time-locked transactions have nLockTime set to
@@ -3853,6 +3903,9 @@ bool ContextualCheckTransactionForCurrentBlock(
     // When the next block is created its previous block will be the current
     // chain tip, so we use that to calculate the median time passed to
     // ContextualCheckTransaction() if LOCKTIME_MEDIAN_TIME_PAST is set.
+    // BIP113要求时间锁定的交易将nLockTime设置为小于它们包含的上一个块的中位时间。
+    // 当创建下一个块时，它的前一个块将成为当前激活连的顶端。
+    //3. 获取当前激活链的顶端区块时间戳；
     const int64_t nLockTimeCutoff = (flags & LOCKTIME_MEDIAN_TIME_PAST)
                                         ? chainActive.Tip()->GetMedianTimePast()
                                         : GetAdjustedTime();
@@ -4156,6 +4209,9 @@ static bool AcceptBlock(const Config &config,
     return true;
 }
 
+//处理一个新块；步骤：先检查块--》接收块--》检查全局块索引--》通知主链的Tip--》在主链上激活当前块。
+// pblock(in):从网络中接收到的区块；  fForceProcessing(in):是否强制进行块处理；
+// fNewBlock(out):该接收到的区块是否为新块。     config(in):当前的主链参数
 bool ProcessNewBlock(const Config &config,
                      const std::shared_ptr<const CBlock> pblock,
                      bool fForceProcessing, bool *fNewBlock) {
@@ -4168,27 +4224,32 @@ bool ProcessNewBlock(const Config &config,
         CValidationState state;
         // Ensure that CheckBlock() passes before calling AcceptBlock, as
         // belt-and-suspenders.
+        //1. 先检查新块
         bool ret = CheckBlock(config, *pblock, state, chainparams.GetConsensus());
 
         LOCK(cs_main);
 
         if (ret) {
             // Store to disk
+            //2. 接收区块
             ret = AcceptBlock(config, pblock, state, &pindex, fForceProcessing,
                               nullptr, fNewBlock);
         }
+        //3. 检查本节点的块索引
         CheckBlockIndex(chainparams.GetConsensus());
+        //4. 查看块的处理结果，如果出错，向相关的组件进行通告。
         if (!ret) {
             GetMainSignals().BlockChecked(*pblock, state);
             return error("%s: AcceptBlock FAILED", __func__);
         }
     }
-
+    //5. 接收块成功，更新当前主链的Tip
     NotifyHeaderTip();
 
     // Only used to report errors, not invalidity - ignore it
     CValidationState state;
     // pblock： 刚接收的区块
+    //6. 将接收到的区块在当前主链上激活。
     if (!ActivateBestChain(config, state, pblock))
         return error("%s: ActivateBestChain failed", __func__);
 

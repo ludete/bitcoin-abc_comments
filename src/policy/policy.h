@@ -25,7 +25,9 @@ static const uint64_t DEFAULT_BLOCK_PRIORITY_PERCENTAGE = 5;
 /** Default for -blockmintxfee, which sets the minimum feerate for a transaction
  * in blocks created by mining code **/
 static const Amount DEFAULT_BLOCK_MIN_TX_FEE(1000);
-/** The maximum size for transactions we're willing to relay/mine */
+/** The maximum size for transactions we're willing to relay/mine
+ * 节点愿意去中继和打包的 交易的最大字节数
+ * */
 static const unsigned int MAX_STANDARD_TX_SIZE = 100000;
 /** Maximum number of signature check operations in an IsStandard() P2SH script
  */
@@ -53,6 +55,7 @@ static const unsigned int MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600;
  * standard and should be done with care and ideally rarely. It makes sense to
  * only increase the dust limit after prior releases were already not creating
  * outputs below the new threshold.
+ * 定义灰尘交易的最小费率。
  */
 static const Amount DUST_RELAY_TX_FEE(1000);
 

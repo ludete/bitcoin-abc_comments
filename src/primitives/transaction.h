@@ -147,6 +147,7 @@ public:
 
     ADD_SERIALIZE_METHODS;
 
+    //序列化，反序列化的操作
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream &s, Operation ser_action) {
         READWRITE(nValue);
@@ -160,6 +161,7 @@ public:
 
     bool IsNull() const { return (nValue == -1); }
 
+    // 获取金额的阈值
     Amount GetDustThreshold(const CFeeRate &minRelayTxFee) const {
         // "Dust" is defined in terms of CTransaction::minRelayTxFee, which has
         // units satoshis-per-kilobyte. If you'd pay more than 1/3 in fees to
@@ -170,16 +172,24 @@ public:
         // txout is 31 bytes big, and will need a CTxIn of at least 67 bytes to
         // spend: so dust is a spendable txout less than 294*minRelayTxFee/1000
         // (in satoshis).
-        if (scriptPubKey.IsUnspendable()) return 0;
+        // 如果你花费查过1/3的费用来花钱，我们就认为这个交易是灰尘交易(及输出金额还没有交易费高)。
+        // 一个典型的非SegWit的输出是34字节，还需要至少一个交易输入(该输入至少为148字节)。所以，
+        // 灰尘交易是一个小于546*minRelayTxFee/1000的输出。
 
+        // 如果该脚本为不可以花费的脚本，则返回阈值为0.
+        if (scriptPubKey.IsUnspendable()) return 0;
+        // 获取这个交易输出的字节大小
         size_t nSize = GetSerializeSize(*this, SER_DISK, 0);
 
         // the 148 mentioned above
+        // 大约估计一个交易的最小字节数
         nSize += (32 + 4 + 1 + 107 + 4);
-
+        // 获取在该费率下，这些字节应该付的交易费。
         return 3 * minRelayTxFee.GetFee(nSize);
     }
 
+    //判断该交易是否属于微尘交易。(该交易的标志就是 输出金额巨小)
+    // minRelayTxFee(in):节点配置的最低输出费。
     bool IsDust(const CFeeRate &minRelayTxFee) const {
         return (nValue < GetDustThreshold(minRelayTxFee));
     }

@@ -172,6 +172,7 @@ uint256 ComputeMerkleRootFromBranch(const uint256 &leaf,
     return hash;
 }
 
+//生成一个块的merkle树。
 uint256 BlockMerkleRoot(const CBlock &block, bool *mutated) {
     std::vector<uint256> leaves;
     leaves.resize(block.vtx.size());

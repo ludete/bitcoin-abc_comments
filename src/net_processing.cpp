@@ -83,7 +83,8 @@ int nSyncStarted = 0;
  * Set mapBlockSource[hash].second to false if the node should not be punished
  * if the block is invalid.
  *
- * 接收到的区块资源，存储起来，以便处理之后发出
+ * 存储接收到的区块资源，以便处理之后发出拒绝信息或在处理完块之后禁止它们。由cs_main包婚。
+ * 如果在区块为无效的情况下，不想处罚该节点，则将bool值设为 false。
  */
 std::map<uint256, std::pair<NodeId, bool>> mapBlockSource;
 
@@ -112,16 +113,23 @@ std::unique_ptr<CRollingBloomFilter> recentRejects;
 uint256 hashRecentRejectsChainTip;
 
 /** Blocks that are in flight, and that are in the queue to be downloaded.
- * Protected by cs_main. */
+ * Protected by cs_main.
+ * 正在传输中，且正在下载队列中的块。
+ * */
 struct QueuedBlock {
     uint256 hash;
     //!< Optional.
     const CBlockIndex *pindex;
     //!< Whether this block has validated headers at the time of request.
+    // 返回这个块在当前的请求时间，是否含有有效的块头。
     bool fValidatedHeaders;
     //!< Optional, used for CMPCTBLOCK downloads
+    //用于紧凑块的下载。
     std::unique_ptr<PartiallyDownloadedBlock> partialBlock;
 };
+
+// 正在传输中的块。key:块哈希； value:<节点ID，区块列表>
+// 存储本节点正在向别的节点 请求的块。
 std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator>>
     mapBlocksInFlight;
 
@@ -131,7 +139,9 @@ std::list<NodeId> lNodesAnnouncingHeaderAndIDs;
 /** Number of preferable block download peers. */
 int nPreferredDownload = 0;
 
-/** Number of peers from which we're downloading blocks. */
+/** Number of peers from which we're downloading blocks.
+ * 我们正在从多少个对等节点下载区块
+ * */
 int nPeersWithValidatedDownloads = 0;
 
 /** Relay map, protected by cs_main.
@@ -196,15 +206,17 @@ struct CNodeState {
     //! Whether we've started headers synchronization with this peer.
     bool fSyncStarted;
     //! Since when we're stalling block download progress (in microseconds), or
-    //! 0.
-    int64_t nStallingSince;
-    std::list<QueuedBlock> vBlocksInFlight;
+    //! 0.  自从当我们拖延区块的下载进程时间(微妙)；不存在拖延，为0.
+    int64_t nStallingSince;                     // 拖延的时间。
+    std::list<QueuedBlock> vBlocksInFlight;     // 从该节点下载的区块列表
     //! When the first entry in vBlocksInFlight started downloading. Don't care
     //! when vBlocksInFlight is empty.
-    int64_t nDownloadingSince;
-    int nBlocksInFlight;
-    int nBlocksInFlightValidHeaders;
+    // 当在vBlocksInFlight中首个条目开始下载时。当vBlocksInFlight为空时不关心这种状态。
+    int64_t nDownloadingSince;              //区块开始下载的时间
+    int nBlocksInFlight;                    //在传输中的块的数目
+    int nBlocksInFlightValidHeaders;        //该节点在传输中的有效的块头数目
     //! Whether we consider this a preferred download peer.
+    // 我们是否认为 该节点是首选的下载节点。true：是；
     bool fPreferredDownload;
     //! Whether this peer wants invs or headers (when possible) for block
     //! announcements.
@@ -377,25 +389,40 @@ void FinalizeNode(NodeId nodeid, bool &fUpdateConnectionTime) {
 // Returns a bool indicating whether we requested this block.
 // Also used if a block was /not/ received and timed out or started with another
 // peer.
+//    表示这个块是否已经被接受。hash(in)：块的哈希
+// 该函数有三个功能：  1. 返回一个bool值，表示我们是否请求了这个区块。
+//                  2. 也被用于检查是否一个块已接收
+//                  3. 一个块超时或被另一个对等节点使用。
+//
 bool MarkBlockAsReceived(const uint256 &hash) {
+
+    //1. 在全局状态中查找该块；是否这个块是我们正在向其它节点请求的块。
     std::map<uint256,
              std::pair<NodeId, std::list<QueuedBlock>::iterator>>::iterator
         itInFlight = mapBlocksInFlight.find(hash);
+    //2. 该块存在于全局队列中
     if (itInFlight != mapBlocksInFlight.end()) {
+        //3. 获取节点的状态信息
         CNodeState *state = State(itInFlight->second.first);
         state->nBlocksInFlightValidHeaders -=
             itInFlight->second.second->fValidatedHeaders;
+        //4. 如果现在连接的 节点有效块头已等于0，且这个块含有有效的块头。
         if (state->nBlocksInFlightValidHeaders == 0 &&
             itInFlight->second.second->fValidatedHeaders) {
             // Last validated block on the queue was received.
+            // 队列中最后验证的块 已收到。
+            // 可能标识本节点已经同下载节点处于同步状态，所以正在下载的节点数目减一。
             nPeersWithValidatedDownloads--;
         }
+        //5. 如果查找的区块为下载队列中的第一个 区块。
         if (state->vBlocksInFlight.begin() == itInFlight->second.second) {
             // First block on the queue was received, update the start download
             // time for the next one
+            // 队列中的第一个块被接收，更新下一个区块开始下载的时间。
             state->nDownloadingSince =
                 std::max(state->nDownloadingSince, GetTimeMicros());
         }
+        //6. 更新这个链接节点的传输区块状态
         state->vBlocksInFlight.erase(itInFlight->second.second);
         state->nBlocksInFlight--;
         state->nStallingSince = 0;
@@ -2163,13 +2190,14 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
         pfrom->setAskFor.erase(inv.hash);       //从节点的缓冲中删除这个交易
         mapAlreadyAskedFor.erase(inv.hash);     //从全局状态中移除这个交易
 
-        std::list<CTransactionRef> lRemovedTxn;
+        std::list<CTransactionRef> lRemovedTxn; //当前方法的调用方法内没有对该值进行任何操作。
         //5. 如果该交易消息不存在当前节点，且成功加入到了交易池。
         if (!AlreadyHave(inv) &&
             AcceptToMemoryPool(config, mempool, state, ptx, true,
                                &fMissingInputs, &lRemovedTxn)) {
             mempool.check(pcoinsTip);
-            //6. 将该交易添加到 所有链接节点的 待处理集合中
+            //6. 将该交易添加到 所有链接节点的 待处理集合中;
+            // 即向外中继被添加进交易池的交易
             RelayTransaction(tx, connman);
             //7. 遍历该交易的所有输出
             for (size_t i = 0; i < tx.vout.size(); i++) {
@@ -2223,6 +2251,7 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
                         LogPrint("mempool", "   accepted orphan tx %s\n",
                                  orphanId.ToString());
                         //16. 将该孤儿交易添加到节点的待中继交易集合中
+                        // 即向外中继被添加进交易池的交易
                         RelayTransaction(orphanTx, connman);
                         //17. 构造以该孤儿交易作为父交易的 outpoint结构，并将它们放入工作队列中
                         for (size_t i = 0; i < orphanTx.vout.size(); i++) {
@@ -2927,9 +2956,12 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
         }
     }
 
+    //接收到区块消息，进行处理
     else if (strCommand == NetMsgType::BLOCK && !fImporting &&
-             !fReindex) // Ignore blocks received while importing
+             !fReindex) // Ignore blocks received while importing 当从磁盘上导入时，忽略网络上接收到的块。
     {
+
+        //1. 获取接收自网络中的区块
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
         vRecv >> *pblock;
 
@@ -2940,20 +2972,29 @@ static bool ProcessMessage(const Config &config, CNode *pfrom,
         // unless we're still syncing with the network. Such an unrequested
         // block may still be processed, subject to the conditions in
         // AcceptBlock().
-        bool forceProcessing = pfrom->fWhitelisted && !IsInitialBlockDownload();
+        //2. 处理所有来自白名单节点的区块，除非我们正在同步网络中的区块。 处理的结果受限于 AcceptBlock中的条件。
+        bool forceProcessing = pfrom->fWhitelisted && !IsInitialBlockDownload();        //true,表示可以处理块。
+        // 计算块的哈希
         const uint256 hash(pblock->GetHash());
         {
             LOCK(cs_main);
             // Also always process if we requested the block explicitly, as we
             // may need it even though it is not a candidate for a new best tip.
+            // 如果是我们明确从网络中请求来的块，需要一直被处理。因为我们可能需要它，即使它
+            // 不是当前主链顶端的候选区块。
+            //3. 此处标识网络中接收到的区块，是否是我们正在想别的节点请求的区块。
             forceProcessing |= MarkBlockAsReceived(hash);
             // mapBlockSource is only used for sending reject messages and DoS
             // scores, so the race between here and cs_main in ProcessNewBlock
             // is fine.
+            //4. mapBlockSource 全局状态仅被用来发送拒绝信息 和 DOS评分，此处与ProcessNewBlock
+            // 中不存在静态条件。因为被cs_main保护。
             mapBlockSource.emplace(hash, std::make_pair(pfrom->GetId(), true));
         }
         bool fNewBlock = false;
+        //5. 对接收到的区块进行处理
         ProcessNewBlock(config, pblock, forceProcessing, &fNewBlock);
+        //6. 如果接收到的为新块，则更新节点最后接收区块的时间。
         if (fNewBlock) {
             pfrom->nLastBlockTime = GetTime();
         }

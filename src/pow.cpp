@@ -139,6 +139,7 @@ uint32_t CalculateNextWorkRequired(const CBlockIndex *pindexPrev,
     return bnNew.GetCompact();
 }
 
+//检查块头的工作量
 bool CheckProofOfWork(uint256 hash, uint32_t nBits,
                       const Consensus::Params &params) {
     bool fNegative;

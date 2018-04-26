@@ -1873,7 +1873,7 @@ bool AppInitMain(Config &config, boost::thread_group &threadGroup,
     }
 
     // Step 7: load block chain
-
+    // 重建索引，加载块链
     fReindex = GetBoolArg("-reindex", false);
     bool fReindexChainState = GetBoolArg("-reindex-chainstate", false);
 

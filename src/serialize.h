@@ -816,6 +816,7 @@ protected:
     const int nVersion;
 
 public:
+    // 字节计算
     CSizeComputer(int nTypeIn, int nVersionIn)
         : nSize(0), nType(nTypeIn), nVersion(nVersionIn) {}
 

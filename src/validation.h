@@ -51,6 +51,7 @@ struct PrecomputedTransactionData;
 struct LockPoints;
 
 ///Users/bitmain/Mywork/clean-bcc/bitcoin-abc/src/validation.h
+// 获取最小的交易字节大小
 #define MIN_TRANSACTION_SIZE                                                   \
     (::GetSerializeSize(CTransaction(), SER_NETWORK, PROTOCOL_VERSION))
 
@@ -586,8 +587,11 @@ bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex,
                        const Consensus::Params &consensusParams);
 
 /** Functions for validating blocks and updating the block tree */
+// 用来验证区块，更新区块树。
 
-/** Context-independent validity checks */
+/** Context-independent validity checks
+ ** 上下文无关的有效性检查
+ * */
 bool CheckBlockHeader(const CBlockHeader &block, CValidationState &state,
                       const Consensus::Params &consensusParams,
                       bool fCheckPOW = true);

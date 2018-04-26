@@ -208,6 +208,7 @@ bool CCoinsViewCache::HaveCoin(const COutPoint &outpoint) const {
     return it != cacheCoins.end() && !it->second.coin.IsSpent();
 }
 
+// 查看一个outpoint是否存在于 view的缓存中
 bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
     CCoinsMap::const_iterator it = cacheCoins.find(outpoint);
     return it != cacheCoins.end();

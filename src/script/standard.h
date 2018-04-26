@@ -48,13 +48,13 @@ static const unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS =
     SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC | SCRIPT_ENABLE_SIGHASH_FORKID;
 
 enum txnouttype {
-    TX_NONSTANDARD,
+    TX_NONSTANDARD,     //非标准交易
     // 'standard' transaction types:
-    TX_PUBKEY,
-    TX_PUBKEYHASH,
-    TX_SCRIPTHASH,
-    TX_MULTISIG,
-    TX_NULL_DATA,
+    TX_PUBKEY,          //花费到公钥的标准交易          p2pk
+    TX_PUBKEYHASH,      //花费到公钥哈希的标准交易       p2pkh
+    TX_SCRIPTHASH,      //花费到脚本哈希的标准交易      p2sh
+    TX_MULTISIG,        //多重签名的交易               交易输出中含有组合锁定脚本x-of-3的脚本
+    TX_NULL_DATA,       //不可花费的交易
 };
 
 class CNoDestination {
