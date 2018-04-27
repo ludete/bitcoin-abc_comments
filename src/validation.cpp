@@ -3395,7 +3395,8 @@ bool ResetBlockFailureFlags(CBlockIndex *pindex) {
 // 添加该块的索引至全局状态；setDirtyBlockIndex，mapBlockIndex ，pindexBestHeader， 并更新创建的块索引的内部数据
 // block(in):添加的区块；
 CBlockIndex *AddToBlockIndex(const CBlockHeader &block) {
-    //1. Check for duplicate；如果该区块已经在全局状态中，直接返回它已有的索引； 避免重复添加
+    //1. Check for duplicate；
+    // 如果该区块已经在全局状态中，直接返回它已有的索引； 避免重复添加
     uint256 hash = block.GetHash();
     BlockMap::iterator it = mapBlockIndex.find(hash);
     if (it != mapBlockIndex.end()) return it->second;
@@ -3419,21 +3420,23 @@ CBlockIndex *AddToBlockIndex(const CBlockHeader &block) {
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
         pindexNew->BuildSkip();
     }
-    //6. 更新当前链的最大时间和工作量(因为该块为当前链的Tip)
+    //6. 更新当前新块索引链的最大时间； (因为该块为当前链的Tip)
     pindexNew->nTimeMax =
         (pindexNew->pprev
              ? std::max(pindexNew->pprev->nTimeMax, pindexNew->nTime)
              : pindexNew->nTime);
+    //7. 更新当前新块索引的链工作量
     pindexNew->nChainWork =
         (pindexNew->pprev ? pindexNew->pprev->nChainWork : 0) +
         GetBlockProof(*pindexNew);
+    //8. 设置该块的状态为BLOCK_VALID_TREE
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
-    //7. 更新全局状态的Tip为该块。
+    //9. 更新全局状态的Tip为该块。
     if (pindexBestHeader == nullptr ||
         pindexBestHeader->nChainWork < pindexNew->nChainWork) {
         pindexBestHeader = pindexNew;
     }
-    //8. 将该块的索引加入全局状态中
+    //10. 将该块的索引加入全局的脏块索引状态中。
     setDirtyBlockIndex.insert(pindexNew);
 
     return pindexNew;
@@ -3675,6 +3678,7 @@ bool CheckBlock(const Config &config, const CBlock &block,
         // Check for merkle tree malleability (CVE-2012-2459): repeating
         // sequences of transactions in a block without affecting the merkle
         // root of a block, while still invalidating it.
+        // 检查merkle树的延展性。 一个块中重复的交易序列，不会影响merkle Root，但仍然会使这个块无效。
         if (mutated) {
             return state.DoS(100, false, REJECT_INVALID, "bad-txns-duplicate",
                              true, "duplicate transaction");
@@ -3776,18 +3780,20 @@ static bool CheckIndexAgainstCheckpoint(const CBlockIndex *pindexPrev,
                                         CValidationState &state,
                                         const CChainParams &chainparams,
                                       const uint256 &hash) {
-    //1. 如果该块为创世块，则返回TRUE。
+    //1. 如果父块为创世块，则返回TRUE。
     if (*pindexPrev->phashBlock ==
         chainparams.GetConsensus().hashGenesisBlock) {
         return true;
     }
 
-    //2. 获取检查块的高度
+    //2. 根据父块，获取当前块的高度
     int nHeight = pindexPrev->nHeight + 1;
     // Don't accept any forks from the main chain prior to last checkpoint
     // 在这些检查点之前的块，不接受任何来自主链的分叉。(因为这些检查点都是以前主链上稳定的区块)
+    // 获取当前最后一个接收块附近的检查点。
     CBlockIndex *pcheckpoint =
         Checkpoints::GetLastCheckpoint(chainparams.Checkpoints());
+    // 如果检查点不为空，且当前块的高度小于检查点高度
     if (pcheckpoint && nHeight < pcheckpoint->nHeight) {
         return state.DoS(
             100,
@@ -3914,7 +3920,7 @@ bool ContextualCheckTransactionForCurrentBlock(
                                       nBlockHeight, nLockTimeCutoff);
 }
 
-//检查块的上下文；block(in):检查的块；state(out):检查后的状态；pindexPrev(in):检查块的父区块
+// 检查块的上下文；block(in):检查的块；state(out):检查后的状态；pindexPrev(in):检查块的父区块
 // 根据交易所在的块高度，采用不同的规则，检查块中的交易格式。
 bool ContextualCheckBlock(const Config &config, const CBlock &block,
                           CValidationState &state,
@@ -3966,6 +3972,7 @@ bool ContextualCheckBlock(const Config &config, const CBlock &block,
 
 //接收块头 block(in): 将要接收的块； state(out): 处理过程中的状态；
 //ppindex(out): 创建接收块的索引(即参一)
+// 没接收一个块时，先判断该块是否已经被接收，
 // 每当接收到一个块时，都会先检查块，符合条件，创建该块的索引，并更新其索引的状态，
 //然后将该索引加入全局状态中，然后检查全局状态中的所有索引。
 static bool AcceptBlockHeader(const Config &config, const CBlockHeader &block,
@@ -3978,8 +3985,9 @@ static bool AcceptBlockHeader(const Config &config, const CBlockHeader &block,
     //1. 查找该区块在全局状态中是否存在
     BlockMap::iterator miSelf = mapBlockIndex.find(hash);
     CBlockIndex *pindex = nullptr;
+    // 非创世块的时候进入。
     if (hash != chainparams.GetConsensus().hashGenesisBlock) {
-        //2. 存在，判断该块的状态，打印log，然后退出。
+        //2. 该块在全局中存在，标识已被本节点接收，打印块的状态，然后退出
         if (miSelf != mapBlockIndex.end()) {
             // Block header is already known.
             pindex = miSelf->second;
@@ -3994,13 +4002,14 @@ static bool AcceptBlockHeader(const Config &config, const CBlockHeader &block,
             return true;
         }
 
-        //3. 不存在于全局状态中，检查块的工作量Pow
+        //3. 到这步时，标识该块是一个新块。先检查块头的工作量
         if (!CheckBlockHeader(block, state, chainparams.GetConsensus())) {
             return error("%s: Consensus::CheckBlockHeader: %s, %s", __func__,
                          hash.ToString(), FormatStateMessage(state));
         }
 
-        //4. Get prev block index； 查看该块的父区块是否在全局状态中，不存在，出错，退出
+        //4. Get prev block index；
+        // 查看该块的父区块是否已被接收，未接收，报错退出。
         CBlockIndex *pindexPrev = nullptr;
         BlockMap::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
         if (mi == mapBlockIndex.end()) {
@@ -4016,7 +4025,7 @@ static bool AcceptBlockHeader(const Config &config, const CBlockHeader &block,
         }
 
         assert(pindexPrev);
-        //6. 检查一个块，是否来自在检查点前的分叉块
+        //6. 检查一个块，是否来自在检查点前的分叉块，如果是，直接返回错误。
         if (fCheckpointsEnabled &&
             !CheckIndexAgainstCheckpoint(pindexPrev, state, chainparams,
                                          hash)) {
@@ -4032,15 +4041,18 @@ static bool AcceptBlockHeader(const Config &config, const CBlockHeader &block,
                          __func__, hash.ToString(), FormatStateMessage(state));
         }
     }
-    //4. 如果pindex为NULL，标识该块上述检查已通过，且它的父区块在全局状态中可以找到。接下来将该块加入全局状态中。
+    //8. 如果pindex为NULL，标识该块还未被本节点接收，但上述检查已通过，
+    // 且它的父区块在全局状态中可以找到。接下来将该块的索引加入全局状态中。
     if (pindex == nullptr) {
+        // 生成该块的索引，并将索引添加到全局的状态中setDirtyBlockIndex，
+        // 此时该块索引的状态为BLOCK_VALID_TREE。
         pindex = AddToBlockIndex(block);
     }
 
     if (ppindex) {
         *ppindex = pindex;
     }
-    //5. 检查块的索引状态
+    //9. 检查全局块的索引状态
     CheckBlockIndex(chainparams.GetConsensus());
 
     return true;
@@ -4074,7 +4086,7 @@ bool ProcessNewBlockHeaders(const Config &config,
  * 将区块数据存储在磁盘上。 如果dbp非空，这个文件是已经在磁盘上的文件
  * pblock(in) 将写入磁盘的块，state(out):写入时的状态，pindex(out): 创建该区块的索引，
  * fRequested(in):是否要求强制处理该区块；当块不是来自网络，或来自白名单节点的块数据
- * dbp(in): 块写入磁盘的位置；存在时，将要写入文件已知
+ * dbp(in): 块写入磁盘的位置；存在时，将要写入文件已知; （对于一个新块，该参数为nil）
  * fNewBlock(out):该区块是否为新块
  */
 static bool AcceptBlock(const Config &config,
@@ -4092,6 +4104,7 @@ static bool AcceptBlock(const Config &config,
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
     // pindex(out)  block(in)
+    //1. 接收块头，出错，退出。
     if (!AcceptBlockHeader(config, block, state, &pindex)) {
         return false;
     }
@@ -4099,8 +4112,12 @@ static bool AcceptBlock(const Config &config,
     // Try to process all requested blocks that we don't have, but only
     // process an unrequested block if it's new and has enough work to
     // advance our tip, and isn't too many blocks ahead.
-    // 处理所有 requested = TRUE 的区块(此区块为新接收的块)；当 requested = false 时，仅处理
-    // 块的链工作量 大于当前激活链最高块，且时间不是太超前的区块。
+    // 此处对块的处理分为两类：我们请求的；不是我们请求的。
+    // 尝试处理所有的我们请求的块;
+    // 对于未请求的块，只有当它是新块，且比当前链的Tip含有更多的工作量，
+    // 且该块不是太超前的块，满足上述三个请求，才会处理该块。
+    //2. 查看是否节点已经含有了该块的数据； 是否该块的工作量大于当前主链的工作量。
+    // 是否该块太超前。
     bool fAlreadyHave = pindex->nStatus & BLOCK_HAVE_DATA;
     bool fHasMoreWork =
         (chainActive.Tip() ? pindex->nChainWork > chainActive.Tip()->nChainWork
@@ -4110,8 +4127,8 @@ static bool AcceptBlock(const Config &config,
     // blocks which are too close in height to the tip.  Apply this test
     // regardless of whether pruning is enabled; it should generally be safe to
     // not process unrequested blocks.
-    // 乱序的块限制了裁剪的效率，因为裁剪不能删除包含距离激活链Tip 近的区块文件。无论是否裁剪，
-    // 都进行该测试，当不处理requested = false的块，一般是安全的。
+    // 太过乱序的块限制了裁剪的效率，因为裁剪不会删除包含距离激活链Tip 太近的区块文件。无论是否裁剪，
+    // 都进行该测试，当不处理未请求的块，一般是安全的。
     bool fTooFarAhead =
         (pindex->nHeight > int(chainActive.Height() + MIN_BLOCKS_TO_KEEP));
 
@@ -4120,37 +4137,43 @@ static bool AcceptBlock(const Config &config,
     // This requires some new chain datastructure to efficiently look up if a
     // block is in a chain leading to a candidate for best tip, despite not
     // being such a candidate itself.
+    // 通过从本函数的参数列表中移除 fRequested，来从块的下载逻辑解耦这个函数。
 
     // TODO: deal better with return value and error conditions for duplicate
-    // and unrequested blocks.  这个块已存在，返回TRUE
+    //3. and unrequested blocks.  这个块已存在，返回TRUE
     if (fAlreadyHave) {
         return true;
     }
 
-    // If we didn't ask for it: 如果没有要求
+    // If we didn't ask for it:
+    //4. 如果没有请求这个接收的块，进入下列条件
     if (!fRequested) {
-        // This is a previously-processed block that was pruned. 是一个已被处理但被裁减的区块。
+        // This is a previously-processed block that was pruned.
+        // 是一个已被处理但又被裁减的区块。因为nTx状态只有在块被完整验证和接收后，才会进行赋值。
         if (pindex->nTx != 0) {
             return true;
         }
 
-        // Don't process less-work chains.没有足够的工作量，都不处理
+        // Don't process less-work chains.
+        // 没有足够的工作量，不处理
         if (!fHasMoreWork) {
             return true;
         }
 
-        // Block height is too high. 时间太靠前，都不处理
+        // Block height is too high.
+        // 该块太靠前，不处理
         if (fTooFarAhead) {
             return true;
         }
     }
 
-    //是新块
+    //5. 赋值为新块
     if (fNewBlock) {
         *fNewBlock = true;
     }
 
     const CChainParams &chainparams = config.GetChainParams();
+    //6. 检查块的版本号，交易成熟度，以及coinbase的签名脚本(在BIP34之后，前几个字节必须为块高。)
     if (!CheckBlock(config, block, state, chainparams.GetConsensus()) ||
         !ContextualCheckBlock(config, block, state, chainparams.GetConsensus(),
                               pindex->pprev)) {
@@ -4165,7 +4188,7 @@ static bool AcceptBlock(const Config &config,
     // Header is valid/has work, merkle tree and segwit merkle tree are
     // good...RELAY NOW (but if it does not build on our best tip, let the
     // SendMessages loop relay it)
-    // 上述区块检查通过，为有效区块，开始向外中继；既非初始化下载，且Tip为该区块索引的父区块，标识接收到一个新Tip，开始向外广播。
+    //7. 如果当前节点状态不在下载状态，且这个新块为当前节点的Tip块，那么向外中继该块。
     if (!IsInitialBlockDownload() && chainActive.Tip() == pindex->pprev) {
         GetMainSignals().NewPoWValidBlock(pindex, pblock);
     }
@@ -4173,15 +4196,16 @@ static bool AcceptBlock(const Config &config,
     int nHeight = pindex->nHeight;
 
     // Write block to history file
+    //8. 写块数据至文件
     try {
-        //1. 获取块的序列化后的大小
+        //8.1 获取块的序列化后的大小
         unsigned int nBlockSize =
             ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
         CDiskBlockPos blockPos;
         if (dbp != nullptr) {
             blockPos = *dbp;
         }
-        //2. 查找块文件，此处会对blockPos 进行赋值
+        //2. 查找写该区块在文件中的位置
         if (!FindBlockPos(state, blockPos, nBlockSize + 8, nHeight,
                           block.GetBlockTime(), dbp != nullptr)) {
             return error("AcceptBlock(): FindBlockPos failed");
@@ -5138,10 +5162,14 @@ bool LoadExternalBlockFile(const Config &config, FILE *fileIn,
     return nLoaded > 0;
 }
 
-//检查全局状态中块的索引；每当接收到一个块时，都会先检查块，符合条件，创建该块的索引，并更新其索引的状态，
-// 然后加入全局状态(mapBlockIndex), 然后调用该函数，对全局状态中的包含的所有块索引进行检查
+// 检查全局状态的块索引；
+// 每当接收到一个块时，都会先检查块，符合条件，创建该块的索引，并更新其索引的状态，
+// 然后加入全局状态(mapBlockIndex);
+// 然后调用该函数，对全局状态中的包含的所有块索引进行检查
+// Note : 默认情况下：主链，测试链，都不检查全局的块索引。只有在回归测试中，才会进行检查。
 static void CheckBlockIndex(const Consensus::Params &consensusParams) {
-    //1. 不检查索引
+    //1. 不检查索引;
+    // 默认情况下：主链，测试链，都不检查全局的块索引。只有在回归测试中，才会进行检查。
     if (!fCheckBlockIndex) {
         return;
     }
