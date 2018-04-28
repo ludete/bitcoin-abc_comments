@@ -679,7 +679,9 @@ bool InvalidateBlock(const Config &config, CValidationState &state,
  * */
 bool ResetBlockFailureFlags(CBlockIndex *pindex);
 
-/** The currently-connected chain of blocks (protected by cs_main). */
+/** The currently-connected chain of blocks (protected by cs_main).
+ * 当前节点运行的主链
+ * */
 extern CChain chainActive;
 
 /** Global variable that points to the active CCoinsView (protected by cs_main)

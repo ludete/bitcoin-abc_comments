@@ -129,7 +129,7 @@ std::set<CBlockIndex *, CBlockIndexWorkComparator> setBlockIndexCandidates;
 /**
  * All pairs A->B, where A (or one of its ancestors) misses transactions, but B
  * has transactions. Pruned nodes may have entries where B is missing data. 修剪的节点含有的条目B，可能缺少数据
- * A 为丢失的祖先交易， B为当前检查的交易
+ * 存储只收到块头的区块
  */
 std::multimap<CBlockIndex *, CBlockIndex *> mapBlocksUnlinked;
 
@@ -160,7 +160,10 @@ int32_t nBlockReverseSequenceId = -1;
  * */
 arith_uint256 nLastPreciousChainwork = 0;
 
-/** Dirty block index entries. 脏块的索引条目 */
+/** Dirty block index entries.
+ * 一个新块写完文件后，会调用 AddToBlockIndex() 为这个块创建块索引，并将块索引添加至该全局状态。
+ * 因为该块还没有被链接到当前 主链上。
+ * */
 std::set<CBlockIndex *> setDirtyBlockIndex;
 
 /** Dirty block file entries 存储脏文件条目. */
@@ -1993,6 +1996,7 @@ DisconnectResult ApplyBlockUndo(const CBlockUndo &blockUndo,
 }
 
 //刷新磁盘文件；fFinalize:true，标识不知道当前文件，打开全局记录的文件描述符；false:知道当前文件。
+//将文件内部同步刷写到磁盘上
 static void FlushBlockFile(bool fFinalize = false) {
     LOCK(cs_LastBlockFile);
 
@@ -3506,7 +3510,7 @@ bool ReceivedBlockTransactions(const CBlock &block, CValidationState &state,
             }
         }
     } else {
-        // 标识该块时个孤块， 将该区块作为孤块放入全局状态中； 即该区块存在父块，并且父块在链中，
+        // 标识该块的的父区块只收到块头，没有收到交易，将这个父块放入全局状态中，进行广播
         if (pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
             mapBlocksUnlinked.insert(
                 std::make_pair(pindexNew->pprev, pindexNew));
@@ -3558,7 +3562,7 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos,
         nLastBlockFile = nFile;
     }
     //更新文件结构中的信息；(只更新文件信息中的块号和时间)
-    vinfoBlockFile[nFile].AddBlock(nHeight, nTime);
+    vinfoBlockFile[nFile].Ad【dBlock(nHeight, nTime);
     //更新文件中的字节信息。
     if (fKnown)
         vinfoBlockFile[nFile].nSize =
@@ -4953,6 +4957,7 @@ bool LoadBlockIndex(const CChainParams &chainparams) {
     return true;
 }
 
+//初始化块索引
 bool InitBlockIndex(const Config &config) {
     LOCK(cs_main);
 
@@ -4968,11 +4973,14 @@ bool InitBlockIndex(const Config &config) {
 
     // Only add the genesis block if not reindexing (in which case we reuse the
     // one already on disk)
+    //1. fReindex: 仅当非重置索引时，将创世块写进文件(因为重置索引时，一般都有存储好的文件，所以不需要重新写)
     if (!fReindex) {
         try {
+            //2. 获取当前主链的创世块
             const CChainParams &chainparams = config.GetChainParams();
             CBlock &block = const_cast<CBlock &>(chainparams.GenesisBlock());
             // Start new block file
+            //3. 开始写文件
             unsigned int nBlockSize =
                 ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
             CDiskBlockPos blockPos;
@@ -4986,6 +4994,7 @@ bool InitBlockIndex(const Config &config) {
                 return error(
                     "LoadBlockIndex(): writing genesis block to disk failed");
             }
+            //4. 添加块索引
             CBlockIndex *pindex = AddToBlockIndex(block);
             if (!ReceivedBlockTransactions(block, state, pindex, blockPos)) {
                 return error("LoadBlockIndex(): genesis block not accepted");
