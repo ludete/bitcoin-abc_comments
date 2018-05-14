@@ -32,6 +32,7 @@ static leveldb::Options GetOptions(size_t nCacheSize) {
     return options;
 }
 
+//CDBWrapper是一个中间结构，block和utxo的入库逻辑都会通过CDBWrapper来写入leveldb
 CDBWrapper::CDBWrapper(const boost::filesystem::path &path, size_t nCacheSize,
                        bool fMemory, bool fWipe, bool obfuscate) {
     penv = nullptr;
@@ -90,6 +91,7 @@ CDBWrapper::~CDBWrapper() {
     options.env = nullptr;
 }
 
+//leveldb
 bool CDBWrapper::WriteBatch(CDBBatch &batch, bool fSync) {
     leveldb::Status status =
         pdb->Write(fSync ? syncoptions : writeoptions, &batch.batch);
