@@ -54,7 +54,7 @@ public:
         nTimeLast = 0;
     }
 
-    CBlockFileInfo() { SetNull(); }
+     CBlockFileInfo() { SetNull(); }
 
     std::string ToString() const;
 

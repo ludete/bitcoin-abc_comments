@@ -30,7 +30,20 @@ class CDBWrapper;
 /**
  * These should be considered an implementation detail of the specific database.
  */
-namespace dbwrapper_private {
+namespace dbwrapnamespace dbwrapper_private {
+
+/**
+ * Handle database error by throwing dbwrapper_error exception.
+ */
+void HandleError(const leveldb::Status &status);
+
+/**
+ * Work around circular dependency, as well as for testing in dbwrapper_tests.
+ * Database obfuscation should be considered an implementation detail of the
+ * specific database.
+ */
+const std::vector<uint8_t> &GetObfuscateKey(const CDBWrapper &w);
+}per_private {
 
 /**
  * Handle database error by throwing dbwrapper_error exception.

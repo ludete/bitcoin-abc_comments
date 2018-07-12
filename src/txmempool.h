@@ -85,9 +85,9 @@ class CTxMemPool;
 
 class CTxMemPoolEntry {
 private:
-    CTransactionRef tx;
+    CTransactionRef tx;//交易引用
     //!< Cached to avoid expensive parent-transaction lookups; 缓存交易费，避免进行昂贵的查询。
-    Amount nFee;
+    Amount nFee;//交易费
     //!< ... and avoid recomputing tx size； 缓存交易大小，避免重复计算；
     size_t nTxSize;
     //!< ... and modified size for priority；计算优先级时，默认交易的每个签名最大有110字节；用一个交易的序列化字节-所有签名大小 = nModSize
@@ -472,6 +472,19 @@ public:
  * disconnected block. If we would exceed the limit, then we instead mark the
  * entry as "dirty", and set the feerate for sorting purposes to be equal the
  * feerate of the transaction without any descendants.
+ * 交易内存池，保存所有在当前主链上有效的交易。
+ * 当交易在网络上广播之后，就会被加进交易池。
+ * 但并不是所有的交易都会被加入，
+ * 例如交易费太小的，或者“双花”的交易或者非标准交易。
+ * 内存池中通过一个boost::multi_index类型的变量mapTx来排序所有交易，
+ * 按照下面四个标准：
+ * -交易hash
+ * -交易费（包括所有子孙交易）
+ * -在mempool中的时间
+ * -挖矿分数
+ * 为了保证交易费的正确性，当新交易被加进mempool时，我们必须更新
+ * 该交易的所有祖先交易信息，而这个操作可能会导致处理速度变慢，
+ * 所以必须对更需祖先的数量进行限制。
  */
 class CTxMemPool {
 private:

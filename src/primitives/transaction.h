@@ -17,8 +17,8 @@ static const int SERIALIZE_TRANSACTION = 0x00;
  * vout */
 class COutPoint {
 public:
-    uint256 hash;
-    uint32_t n;
+    uint256 hash;   //交易的hash
+    uint32_t n;   //对应的序列号
 
     COutPoint() { SetNull(); }
     COutPoint(uint256 hashIn, uint32_t nIn) {
@@ -26,7 +26,7 @@ public:
         n = nIn;
     }
 
-    ADD_SERIALIZE_METHODS;
+    ADD_SERIALIZE_METHODS;//用来序列化数据结构，方便存储和传输
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream &s, Operation ser_action) {
@@ -40,6 +40,7 @@ public:
     }
     bool IsNull() const { return (hash.IsNull() && n == (uint32_t)-1); }
 
+    //重载小于号
     friend bool operator<(const COutPoint &a, const COutPoint &b) {
         int cmp = a.hash.Compare(b.hash);
         return cmp < 0 || (cmp == 0 && a.n < b.n);
@@ -62,17 +63,20 @@ public:
  */
 class CTxIn {
 public:
-    COutPoint prevout;
-    CScript scriptSig;
-    uint32_t nSequence;
+    COutPoint prevout;//前一笔交易的输出位置
+    CScript scriptSig;//解锁脚本
+    uint32_t nSequence;//序列号
 
     /* Setting nSequence to this value for every input in a transaction
-     * disables nLockTime. */
+     * disables nLockTime.
+     * 规则1：如果一笔交易中所有的SEQUENCE_FINAL都被赋值了相应的nSequence，那么nLockTime就会被禁用
+     * */
     static const uint32_t SEQUENCE_FINAL = 0xffffffff;
 
     /* Below flags apply in the context of BIP 68*/
     /* If this flag set, CTxIn::nSequence is NOT interpreted as a
      * relative lock-time.
+     * 规则2：如果设置了这个变量，那么规则1就失效了
      * 下面的flag应用在BIP68 中。如果哲哥flag被设置，交易输入的sequence字段不
      * 标识为相对的时间戳。
      * */
@@ -83,11 +87,13 @@ public:
      * otherwise it specifies blocks with a granularity of 1.
      * 如果sequence字段标识 相对锁定时间，并且这份flag被设置，则相对时间是以512s为一个
      * 锁定单元，否则，它标识一个粒度为1 的块。
+     * 规则3：如果规则1有效并且设置了此变量，那么相对锁定时间就为512秒，否则锁定时间就为1个区块
      * */
     static const uint32_t SEQUENCE_LOCKTIME_TYPE_FLAG = (1 << 22);
 
     /* If CTxIn::nSequence encodes a relative lock-time, this mask is
      * applied to extract that lock-time from the sequence field.
+     * 规则4：如果规则1有效，那么这个变量就用来从nSequence计算对应的锁定时间
      * 如果sequence字段标识为相对的锁定时间，用这个掩码去获取 该交易输入的锁定时间
      * */
     static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
@@ -138,8 +144,8 @@ public:
  */
 class CTxOut {
 public:
-    Amount nValue;
-    CScript scriptPubKey;
+    Amount nValue;//输出金额
+    CScript scriptPubKey;//锁定脚本
 
     CTxOut() { SetNull(); }
 
@@ -162,6 +168,8 @@ public:
     bool IsNull() const { return (nValue == -1); }
 
     // 获取金额的阈值
+    // 获取dust阈值，一笔交易如果交易费小于dust阈值，就会被认为是dust tx，
+    // 此函数在最新版本中已转移到src/policy/policy.h中
     Amount GetDustThreshold(const CFeeRate &minRelayTxFee) const {
         // "Dust" is defined in terms of CTransaction::minRelayTxFee, which has
         // units satoshis-per-kilobyte. If you'd pay more than 1/3 in fees to
@@ -240,7 +248,7 @@ inline void SerializeTransaction(const TxType &tx, Stream &s) {
  */
 class CTransaction {
 public:
-    // Default transaction version.
+    // Default transaction version.默认交易版本
     static const int32_t CURRENT_VERSION = 2;
 
     // Changing the default transaction version requires a two step process:
@@ -254,10 +262,10 @@ public:
     // actually immutable; deserialization and assignment are implemented,
     // and bypass the constness. This is safe, as they update the entire
     // structure, including the hash.
-    const int32_t nVersion;
-    const std::vector<CTxIn> vin;
-    const std::vector<CTxOut> vout;
-    const uint32_t nLockTime;
+    const int32_t nVersion;//版本
+    const std::vector<CTxIn> vin;//交易输入
+    const std::vector<CTxOut> vout;//交易输出
+    const uint32_t nLockTime;//锁定时间
 
 private:
     /** Memory only. */
