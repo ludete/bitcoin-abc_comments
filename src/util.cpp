@@ -788,12 +788,21 @@ void SetupEnvironment() {
     // arenas per core. This is known to cause excessive virtual address space
     // usage in our usage. Work around it by setting the maximum number of
     // arenas to 1.
+    //判断是否为32位系统，如果是64位的话那么sizeof(void*)值就为8
     if (sizeof(void *) == 4) {
+        //mallopt函数是用来控制malloc内存分配时的行为的
         mallopt(M_ARENA_MAX, 1);
+        // M_ARENA_MAX参数是值最多能创建的arena数，一个arena是指malloc在分内内存时的一个内存池，
+        // 而这个arena是线程安全的，也就是说多线程访问时是互斥访问的，既然是互斥访问的，那么很明显，
+        // 当arena数量越多时，线程的竞争就越小，但是需要的内存也就越多（因为arena就相当于一次性申请大量内存，
+        // 然后在malloc时慢慢分配出去）
+
+        // glibc库会为每个核创建2个arena，而这会对32为系统造成虚拟地址空间不足的问题，所以这里设为1.
     }
 #endif
 // On most POSIX systems (e.g. Linux, but not BSD) the environment's locale may
 // be invalid, in which case the "C" locale is used as fallback.
+    //locale()是设置系统区域，这将决定程序所使用的当前语言编码、日期格式、数字格式及其它与区域有关的设置
 #if !defined(WIN32) && !defined(MAC_OSX) && !defined(__FreeBSD__) &&           \
     !defined(__OpenBSD__)
     try {
@@ -807,6 +816,7 @@ void SetupEnvironment() {
     // in multithreading environments, it is set explicitly by the main thread.
     // A dummy locale is used to extract the internal default locale, used by
     // boost::filesystem::path, which is then used to explicitly imbue the path.
+    //文件路径的本地化设置，主要设计宽字符(Wide char)和多字节(Multi bytes)之间的转换问题
     std::locale loc = boost::filesystem::path::imbue(std::locale::classic());
     boost::filesystem::path::imbue(loc);
 }
