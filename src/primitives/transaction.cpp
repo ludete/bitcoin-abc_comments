@@ -31,7 +31,8 @@ std::string CTxIn::ToString() const {
 
 std::string CTxOut::ToString() const {
     return strprintf("CTxOut(nValue=%d.%08d, scriptPubKey=%s)", nValue / COIN,
-                     nValue % COIN, HexStr(scriptPubKey).substr(0, 30));
+                     (nValue % COIN) / SATOSHI,
+                     HexStr(scriptPubKey).substr(0, 30));
 }
 
 CMutableTransaction::CMutableTransaction()
@@ -71,7 +72,7 @@ CTransaction::CTransaction(CMutableTransaction &&tx)
       nLockTime(tx.nLockTime), hash(ComputeHash()) {}
 
 Amount CTransaction::GetValueOut() const {
-    Amount nValueOut(0);
+    Amount nValueOut = Amount::zero();
     for (std::vector<CTxOut>::const_iterator it(vout.begin()); it != vout.end();
          ++it) {
         nValueOut += it->nValue;

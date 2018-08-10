@@ -137,6 +137,7 @@ add_library(common
 	coins.cpp
 	compressor.cpp
 	dstencode.cpp
+	feerate.cpp
 	globals.cpp
 	core_read.cpp
 	core_write.cpp
@@ -180,6 +181,8 @@ add_library(server
 	chain.cpp
 	checkpoints.cpp
 	config.cpp
+	consensus/activation.cpp
+	consensus/tx_verify.cpp
 	globals.cpp
 	httprpc.cpp
 	httpserver.cpp
@@ -218,22 +221,14 @@ add_library(server
 # This require libevent
 find_package(Event REQUIRED)
 
-target_include_directories(server
-	PRIVATE
-		leveldb/helpers/memenv
-		${EVENT_INCLUDE_DIR}
-)
+target_include_directories(server PRIVATE leveldb/helpers/memenv)
 
 target_link_libraries(server
-	${EVENT_LIBRARY}
+	Event
 	bitcoinconsensus
 	leveldb
 	memenv
 )
-
-if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	target_link_libraries(server ${EVENT_PTHREAD_LIBRARY})
-endif()
 
 # Test suite.
 add_subdirectory(test)
@@ -266,8 +261,7 @@ if(BUILD_BITCOIN_CLI)
 		target_sources(bitcoin-cli PRIVATE bitcoin-cli-res.rc)
 	endif()
 
-	target_include_directories(bitcoin-cli PRIVATE ${EVENT_INCLUDE_DIR})
-	target_link_libraries(bitcoin-cli common rpcclient ${EVENT_LIBRARY})
+	target_link_libraries(bitcoin-cli common rpcclient Event)
 endif()
 
 # bitcoin-tx

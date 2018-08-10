@@ -40,6 +40,7 @@ class TransactionOrderingTest(ComparisonTestFramework):
         self.tip = None
         self.blocks = {}
         self.extra_args = [['-whitelist=127.0.0.1',
+                            '-relaypriority=0',
                             "-magneticanomalyactivationtime=%d" % MAGNETIC_ANOMALY_START_TIME,
                             "-replayprotectionactivationtime=%d" % (2 * MAGNETIC_ANOMALY_START_TIME)]]
 
@@ -91,8 +92,8 @@ class TransactionOrderingTest(ComparisonTestFramework):
                     spendable_outputs.append(PreviousSpendableOutput(tx, i))
                 # Put some random data into the transaction in order to randomize ids.
                 # This also ensures that transaction are larger than 100 bytes.
-                tx.vout.append(
-                    CTxOut(0, CScript([random.getrandbits(256), OP_RETURN])))
+                rand = random.getrandbits(256)
+                tx.vout.append(CTxOut(0, CScript([rand, OP_RETURN])))
                 return tx
 
             tx = get_base_transaction()
@@ -252,6 +253,7 @@ class TransactionOrderingTest(ComparisonTestFramework):
         assert_equal(node.getblockheader(forkblockhash)[
                      'mediantime'], MAGNETIC_ANOMALY_START_TIME)
 
+        assert_equal(len(node.getrawmempool()), 15)
         node.generate(1)
         generatedblockhash = node.getbestblockhash()
         assert(forkblockhash != generatedblockhash)

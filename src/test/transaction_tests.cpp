@@ -11,6 +11,7 @@
 #include "checkqueue.h"
 #include "clientversion.h"
 #include "config.h"
+#include "consensus/tx_verify.h"
 #include "consensus/validation.h"
 #include "core_io.h"
 #include "key.h"
@@ -23,7 +24,7 @@
 #include "test/jsonutil.h"
 #include "test/scriptflags.h"
 #include "utilstrencodings.h"
-#include "validation.h" // For CheckRegularTransaction and ContextualCheckTransaction
+#include "validation.h"
 
 #include <map>
 #include <string>
@@ -81,7 +82,8 @@ BOOST_AUTO_TEST_CASE(tx_valid) {
                 mapprevOutScriptPubKeys[outpoint] =
                     ParseScript(vinput[2].get_str());
                 if (vinput.size() >= 4) {
-                    mapprevOutValues[outpoint] = Amount(vinput[3].get_int64());
+                    mapprevOutValues[outpoint] =
+                        vinput[3].get_int64() * SATOSHI;
                 }
             }
             if (!fValid) {
@@ -108,9 +110,9 @@ BOOST_AUTO_TEST_CASE(tx_valid) {
                     break;
                 }
 
-                Amount amount(0);
+                Amount amount = Amount::zero();
                 if (mapprevOutValues.count(tx.vin[i].prevout)) {
-                    amount = Amount(mapprevOutValues[tx.vin[i].prevout]);
+                    amount = mapprevOutValues[tx.vin[i].prevout];
                 }
 
                 uint32_t verify_flags = ParseScriptFlags(test[2].get_str());
@@ -172,7 +174,8 @@ BOOST_AUTO_TEST_CASE(tx_invalid) {
                 mapprevOutScriptPubKeys[outpoint] =
                     ParseScript(vinput[2].get_str());
                 if (vinput.size() >= 4) {
-                    mapprevOutValues[outpoint] = Amount(vinput[3].get_int64());
+                    mapprevOutValues[outpoint] =
+                        vinput[3].get_int64() * SATOSHI;
                 }
             }
             if (!fValid) {
@@ -195,7 +198,7 @@ BOOST_AUTO_TEST_CASE(tx_invalid) {
                     break;
                 }
 
-                Amount amount(0);
+                Amount amount = Amount::zero();
                 if (0 != mapprevOutValues.count(tx.vin[i].prevout)) {
                     amount = mapprevOutValues[tx.vin[i].prevout];
                 }
@@ -329,7 +332,7 @@ void CreateCreditAndSpend(const CKeyStore &keystore, const CScript &outscript,
     outputm.vin[0].prevout = COutPoint();
     outputm.vin[0].scriptSig = CScript();
     outputm.vout.resize(1);
-    outputm.vout[0].nValue = Amount(1);
+    outputm.vout[0].nValue = SATOSHI;
     outputm.vout[0].scriptPubKey = outscript;
     CDataStream ssout(SER_NETWORK, PROTOCOL_VERSION);
     ssout << outputm;
@@ -344,7 +347,7 @@ void CreateCreditAndSpend(const CKeyStore &keystore, const CScript &outscript,
     inputm.vin.resize(1);
     inputm.vin[0].prevout = COutPoint(output->GetId(), 0);
     inputm.vout.resize(1);
-    inputm.vout[0].nValue = Amount(1);
+    inputm.vout[0].nValue = SATOSHI;
     inputm.vout[0].scriptPubKey = CScript();
     bool ret =
         SignSignature(keystore, *output, inputm, 0, SigHashType().withForkId());
@@ -428,13 +431,13 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
         mtx.vin[i].prevout = outpoint;
         mtx.vin[i].scriptSig = CScript();
 
-        mtx.vout.emplace_back(Amount(1000), CScript() << OP_1);
+        mtx.vout.emplace_back(1000 * SATOSHI, CScript() << OP_1);
     }
 
     // sign all inputs
     for (size_t i = 0; i < mtx.vin.size(); i++) {
         bool hashSigned =
-            SignSignature(keystore, scriptPubKey, mtx, i, Amount(1000),
+            SignSignature(keystore, scriptPubKey, mtx, i, 1000 * SATOSHI,
                           sigHashes.at(i % sigHashes.size()));
         BOOST_CHECK_MESSAGE(hashSigned, "Failed to sign test transaction");
     }
@@ -455,7 +458,7 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
     std::vector<Coin> coins;
     for (size_t i = 0; i < mtx.vin.size(); i++) {
         CTxOut out;
-        out.nValue = Amount(1000);
+        out.nValue = 1000 * SATOSHI;
         out.scriptPubKey = scriptPubKey;
         coins.emplace_back(std::move(out), 1, false);
     }
@@ -626,9 +629,9 @@ BOOST_AUTO_TEST_CASE(test_IsStandard) {
 
     // Check dust with default relay fee:
     Amount nDustThreshold = 3 * 182 * dustRelayFee.GetFeePerK() / 1000;
-    BOOST_CHECK_EQUAL(nDustThreshold, Amount(546));
+    BOOST_CHECK_EQUAL(nDustThreshold, 546 * SATOSHI);
     // dust:
-    t.vout[0].nValue = nDustThreshold - Amount(1);
+    t.vout[0].nValue = nDustThreshold - SATOSHI;
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     // not dust:
     t.vout[0].nValue = nDustThreshold;
@@ -636,12 +639,12 @@ BOOST_AUTO_TEST_CASE(test_IsStandard) {
 
     // Check dust with odd relay fee to verify rounding:
     // nDustThreshold = 182 * 1234 / 1000 * 3
-    dustRelayFee = CFeeRate(Amount(1234));
+    dustRelayFee = CFeeRate(1234 * SATOSHI);
     // dust:
-    t.vout[0].nValue = Amount(672 - 1);
+    t.vout[0].nValue = (672 - 1) * SATOSHI;
     BOOST_CHECK(!IsStandardTx(CTransaction(t), reason));
     // not dust:
-    t.vout[0].nValue = Amount(672);
+    t.vout[0].nValue = 672 * SATOSHI;
     BOOST_CHECK(IsStandardTx(CTransaction(t), reason));
     dustRelayFee = CFeeRate(DUST_RELAY_TX_FEE);
 

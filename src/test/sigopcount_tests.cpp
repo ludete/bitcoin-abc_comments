@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "consensus/consensus.h"
+#include "consensus/tx_verify.h"
 #include "consensus/validation.h"
 #include "key.h"
 #include "policy/policy.h" // For STANDARD_CHECKDATASIG_VERIFY_FLAGS.
@@ -12,7 +13,6 @@
 #include "script/standard.h"
 #include "test/test_bitcoin.h"
 #include "uint256.h"
-#include "validation.h"
 
 #include <limits>
 #include <vector>
@@ -128,7 +128,7 @@ void BuildTxs(CMutableTransaction &spendingTx, CCoinsViewCache &coins,
     creationTx.vin[0].prevout = COutPoint();
     creationTx.vin[0].scriptSig = CScript();
     creationTx.vout.resize(1);
-    creationTx.vout[0].nValue = Amount(1);
+    creationTx.vout[0].nValue = SATOSHI;
     creationTx.vout[0].scriptPubKey = scriptPubKey;
 
     spendingTx.nVersion = 1;
@@ -136,7 +136,7 @@ void BuildTxs(CMutableTransaction &spendingTx, CCoinsViewCache &coins,
     spendingTx.vin[0].prevout = COutPoint(creationTx.GetId(), 0);
     spendingTx.vin[0].scriptSig = scriptSig;
     spendingTx.vout.resize(1);
-    spendingTx.vout[0].nValue = Amount(1);
+    spendingTx.vout[0].nValue = SATOSHI;
     spendingTx.vout[0].scriptPubKey = CScript();
 
     AddCoins(coins, CTransaction(creationTx), 0);
@@ -248,12 +248,12 @@ BOOST_AUTO_TEST_CASE(test_max_sigops_per_tx) {
     tx.vin[0].prevout = COutPoint(InsecureRand256(), 0);
     tx.vin[0].scriptSig = CScript();
     tx.vout.resize(1);
-    tx.vout[0].nValue = Amount(1);
+    tx.vout[0].nValue = SATOSHI;
     tx.vout[0].scriptPubKey = CScript();
 
     {
         CValidationState state;
-        BOOST_CHECK(CheckRegularTransaction(CTransaction(tx), state, false));
+        BOOST_CHECK(CheckRegularTransaction(CTransaction(tx), state));
     }
 
     // Get just before the limit.
@@ -263,7 +263,7 @@ BOOST_AUTO_TEST_CASE(test_max_sigops_per_tx) {
 
     {
         CValidationState state;
-        BOOST_CHECK(CheckRegularTransaction(CTransaction(tx), state, false));
+        BOOST_CHECK(CheckRegularTransaction(CTransaction(tx), state));
     }
 
     // And go over.
@@ -271,7 +271,7 @@ BOOST_AUTO_TEST_CASE(test_max_sigops_per_tx) {
 
     {
         CValidationState state;
-        BOOST_CHECK(!CheckRegularTransaction(CTransaction(tx), state, false));
+        BOOST_CHECK(!CheckRegularTransaction(CTransaction(tx), state));
         BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txn-sigops");
     }
 }

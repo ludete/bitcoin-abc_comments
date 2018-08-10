@@ -158,13 +158,15 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test) {
 
     // Test that fFeeler is false by default.
     std::unique_ptr<CNode> pnode1(new CNode(id++, NODE_NETWORK, height, hSocket,
-                                            addr, 0, 0, pszDest, fInboundIn));
+                                            addr, 0, 0, CAddress(), pszDest,
+                                            fInboundIn));
     BOOST_CHECK(pnode1->fInbound == false);
     BOOST_CHECK(pnode1->fFeeler == false);
 
     fInboundIn = true;
     std::unique_ptr<CNode> pnode2(new CNode(id++, NODE_NETWORK, height, hSocket,
-                                            addr, 1, 1, pszDest, fInboundIn));
+                                            addr, 1, 1, CAddress(), pszDest,
+                                            fInboundIn));
     BOOST_CHECK(pnode2->fInbound == true);
     BOOST_CHECK(pnode2->fFeeler == false);
 }
@@ -196,7 +198,7 @@ BOOST_AUTO_TEST_CASE(test_userAgentLength) {
 
     BOOST_CHECK_EQUAL(userAgent(config).size(), MAX_SUBVERSION_LENGTH);
     BOOST_CHECK_EQUAL(userAgent(config),
-                      "/Bitcoin ABC:0.18.0(EB8.0; very very very very very "
+                      "/Bitcoin ABC:0.18.2(EB8.0; very very very very very "
                       "very very very very very very very very very very very "
                       "very very very very very very very very very very very "
                       "very very very very very very very very very very very "
