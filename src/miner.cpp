@@ -195,7 +195,7 @@ BlockAssembler::CreateNewBlock(const CScript &scriptPubKeyIn) {
     nMaxGeneratedBlockSize = ComputeMaxGeneratedBlockSize(*config, pindexPrev);
     //8. 返回当前块的截止时间
     nLockTimeCutoff =
-        (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST)
+        (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST)//00000010
             ? pindexPrev->GetMedianTimePast()
             : pblock->GetBlockTime();
 

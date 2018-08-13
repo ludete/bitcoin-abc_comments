@@ -21,10 +21,10 @@
 class CBlockHeader {
 public:
     // header
-    int32_t nVersion;
-    uint256 hashPrevBlock;
-    uint256 hashMerkleRoot;
-    uint32_t nTime;
+    int32_t nVersion; //4 byte
+    uint256 hashPrevBlock;//32 byte
+    uint256 hashMerkleRoot;//32 byte
+    uint32_t nTime;//4  byte
     uint32_t nBits;
     uint32_t nNonce;
 

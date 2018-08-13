@@ -84,7 +84,7 @@ static const unsigned int STANDARD_NOT_MANDATORY_VERIFY_FLAGS =
  * non-consensus code.
  * 用该标识来 进行sequence和locktime字段的检查。
  * */
-static const unsigned int STANDARD_LOCKTIME_VERIFY_FLAGS =
+static const unsigned int STANDARD_LOCKTIME_VERIFY_FLAGS =//00000011
     LOCKTIME_VERIFY_SEQUENCE | LOCKTIME_MEDIAN_TIME_PAST;
 
 bool IsStandard(const CScript &scriptPubKey, txnouttype &whichType);

@@ -182,8 +182,8 @@ bool CBlockTreeDB::WriteBatchSync(
     int nLastFile, const std::vector<const CBlockIndex *> &blockinfo) {
     CDBBatch batch(*this);
     for (std::vector<std::pair<int, const CBlockFileInfo *>>::const_iterator
-             it = fileInfo.begin();
-         it != fileInfo.end(); it++) {
+                  it = fileInfo.begin();
+          it != fileInfo.end(); it++) {
         batch.Write(std::make_pair(DB_BLOCK_FILES, it->first), *it->second);
     }
     batch.Write(DB_LAST_BLOCK, nLastFile);

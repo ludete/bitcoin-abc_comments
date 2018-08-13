@@ -14,6 +14,8 @@
 
 #include <vector>
 
+//用来描述blk和rev的文件的元数据信息，std::vector<CBlockFileInfo> vinfoBlockFile;当时机操作它的时候，其实是在
+//拿一个vactor来操作的。
 class CBlockFileInfo {
 public:
     //!< number of blocks stored in file； 文件中区块的数量
