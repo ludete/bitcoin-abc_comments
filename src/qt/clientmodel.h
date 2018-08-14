@@ -28,6 +28,7 @@ enum BlockSource {
     BLOCK_SOURCE_NETWORK
 };
 
+//枚举类型，定义了连接的类型
 enum NumConnections {
     CONNECTIONS_NONE = 0,
     CONNECTIONS_IN = (1U << 0),

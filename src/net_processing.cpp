@@ -945,12 +945,21 @@ static void Misbehaving(CNode *node, int howmuch, const std::string &reason) {
 // blockchain -> download logic notification
 //
 
+//继承于CValidationInterface接口，CValidationInterface接口主要定义了对交易同步、区块工作量、挖矿等内容的验证操作。
+// PeerLogicValidation在CValidationInterface的基础上实现了4类验证操作工作，分别是：
+//1。SyncTransaction
+//2。UpdatedBlockTip
+//3。BlockChecked
+//4。NewPoWValidBlock
+
 PeerLogicValidation::PeerLogicValidation(CConnman *connmanIn)
     : connman(connmanIn) {
     // Initialize global variables that cannot be constructed at startup.
     recentRejects.reset(new CRollingBloomFilter(120000, 0.000001));
 }
 
+//是对区块中的孤块交易进行验证，擦除区块中的孤交易，
+// 交易擦除函数为src/net_processing.cpp中的EraseOrphanTx函数。
 void PeerLogicValidation::SyncTransaction(const CTransaction &tx,
                                           const CBlockIndex *pindex,
                                           int nPosInBlock) {
@@ -993,6 +1002,7 @@ static std::shared_ptr<const CBlockHeaderAndShortTxIDs>
     most_recent_compact_block;
 static uint256 most_recent_block_hash;
 
+//该函数实现将本节点新发现区块进行广播，发送给其他节点。
 void PeerLogicValidation::NewPoWValidBlock(
     const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &pblock) {
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> pcmpctblock =
@@ -1039,6 +1049,15 @@ void PeerLogicValidation::NewPoWValidBlock(
     });
 }
 
+
+//更新本节点中区块信息。
+//首先将当前同步的最大区块高度赋值到当前节点中，随后判断是否为初始化区块同步，
+// 如果不是则在while循环体中将之前未包含在最长链中的区块放入链中，存入当前传入最高区块，
+// 并将该最高区块的父区块、爷爷区块、爷爷爷爷区块……也放入链中，
+// 直到存入vHashes的区块数量达到MAX_BLOCKS_TO_ANNOUNCE值，
+// 该宏定义于src/validation.h中，其值为8，即包括传入区块以及往前回溯7个区块，
+// 随后将这些区块通过pnode->PushBlockHash(hash);存入节点中。
+
 void PeerLogicValidation::UpdatedBlockTip(const CBlockIndex *pindexNew,
                                           const CBlockIndex *pindexFork,
                                           bool fInitialDownload) {
@@ -1076,6 +1095,8 @@ void PeerLogicValidation::UpdatedBlockTip(const CBlockIndex *pindexNew,
     nTimeBestReceived = GetTime();
 }
 
+//对收到的区块进行验证，该函数中传入了2个参数，第一个为区块信息，第二个参数为区块验证参数，
+// 该参数类型定义于src/consensus/validation.h中CValidationState，通过该类实现对区块的验证。
 void PeerLogicValidation::BlockChecked(const CBlock &block,
                                        const CValidationState &state) {
     LOCK(cs_main);

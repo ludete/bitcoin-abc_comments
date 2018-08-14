@@ -73,8 +73,11 @@ static const bool DEFAULT_REST_ENABLE = false;
 static const bool DEFAULT_DISABLE_SAFEMODE = false;
 static const bool DEFAULT_STOPAFTERBLOCKIMPORT = false;
 
-std::unique_ptr<CConnman> g_connman;
-std::unique_ptr<PeerLogicValidation> peerLogic;
+//网络初始化时的两个关键变量，这里是他们的定义，初始化的操作是在net.h中完成的。
+std::unique_ptr<CConnman> g_connman; //全局变量
+
+//peerLogic变量为PeerLogicValidation的智能指针对象，该变量为init.cpp中的全局变量，
+std::unique_ptr<PeerLogicValidation> peerLogic; //全局变量
 
 #if ENABLE_ZMQ
 static CZMQNotificationInterface *pzmqNotificationInterface = nullptr;
@@ -1717,15 +1720,32 @@ bool AppInitMain(Config &config, boost::thread_group &threadGroup,
     // is not yet setup and may end up being set up twice if we
     // need to reindex later.
 
+    //通过断言来确定g_connman未初始化，否则程序发出断言错误，并退出；
     assert(!g_connman);
+
+    //通过CConnman的构造函数对g_connman进行初始化
     g_connman = std::unique_ptr<CConnman>(
         new CConnman(config, GetRand(std::numeric_limits<uint64_t>::max()),
                      GetRand(std::numeric_limits<uint64_t>::max())));
+
+    //赋值给局部变量connman，该函数中后续代码都将使用connman来执行网络连接的相关操作。
     CConnman &connman = *g_connman;
 
+    //初始化peerLogic操作
+
+    //peerLogic定义，传入的参数为connman，也就是我们之前分析过的g_Connman变量，
+    // 在PeerLogicValidation中传入该参数的目的是为了获得相连节点的信息，从而实现对同步交易与区块的验证；
     peerLogic.reset(new PeerLogicValidation(&connman));
+    //RegisterValidationInterface函数定义于src/validationinterface.h中，
+    // 在src/validationinterface.cpp中实现，通过其注释可以知道该函数的功能是实现对钱包的注册，
+    // 从而实现钱包可以接收比特币核心的更新消息，这些更新消息可以从其函数实现中找到，
+    // 包括：最高区块、交易同步、交易更新、区块确认以及区块传播等，
+    // 与这个函数相对应的还有取消注册函数UnRegisterValidationInterface，即取消前面说到消息的接收与处理；
     RegisterValidationInterface(peerLogic.get());
-    //注册节点节点的处理操作
+    //RegisterNodeSignals函数也是定义于src/validationinterface.h中，
+    // 并在src/validationinterface.cpp中实现，通过其注释可以知道该函数的功能是实现与
+    // 其他相连网络节点交互消息的注册，包括：消息处理、发送消息、初始化节点以及断开连接，
+    // 与这个函数相对应的还有取消注册函数UnRegisterNodeSignals，即取消与其他节点的交互消息注册。
     RegisterNodeSignals(GetNodeSignals());
 
     if (mapMultiArgs.count("-onlynet")) {

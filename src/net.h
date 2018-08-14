@@ -419,6 +419,11 @@ private:
     std::thread threadOpenConnections;
     std::thread threadMessageHandler;
 };
+//对g_connman进行声明操作。unique_ptr是一个智能指针，它持有对对象的独有权—两个unique_ptr不能指向一个对象，
+// 不能进行复制操作只能进行移动操作
+//unique_ptr拥有它所指向的对象，在某一时刻，只能有一个unique_ptr指向特定的对象。
+// 当unique_ptr被销毁时，它所指向的对象也会被销毁。因此不允许多个unique_ptr指向同一个对象，所以不允许拷贝与赋值
+//重点：通过unique_ptr智能指针，整个程序中只有一个唯一的节点连接管理对象g_connman，可以很好地保证连接信息的唯一性。
 extern std::unique_ptr<CConnman> g_connman;
 void Discover(boost::thread_group &threadGroup);
 void MapPort(bool fUseUPnP);
