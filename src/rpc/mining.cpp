@@ -382,6 +382,12 @@ std::string gbt_vb_name(const Consensus::DeploymentPos pos) {
 
 //如果请求参数包含 mode 关键字，用于在默认的 template 请求或 proposal 间选择。 返回构建一个区块所需的数据。
 //获取区块模板
+//基本流程：
+//1.处理命令帮助和参数个数。
+//2.上锁。
+//3.获取指定参数。
+//4.根据参数创建新区块模板。
+//5.获取区块模板相关信息并返回。
 static UniValue getblocktemplate(const Config &config,
                                  const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() > 1) {// 参数最多为 1 个
