@@ -2502,7 +2502,7 @@ static bool FlushStateToDisk(CValidationState &state, FlushStateMode mode,
     static int64_t nLastWrite = 0;
     static int64_t nLastFlush = 0;
     static int64_t nLastSetChain = 0;
-    std::set<int> setFilesToPrune;
+    std::set<int> setFilesToPrune;//0
 
     bool fFlushForPrune = false;
     try {
@@ -2585,7 +2585,7 @@ static bool FlushStateToDisk(CValidationState &state, FlushStateMode mode,
             // Then update all block file information (which may refer to block
             // and undo files).
             {
-                std::vector<std::pair<int, const CBlockFileInfo *>> vFiles;
+                std::vector<std::pair<int, const C *>> vFiles;
                 vFiles.reserve(setDirtyFileInfo.size());
                 // 缓存全局状态中脏的文件信息，并删除全局状态中该数据
                 for (std::set<int>::iterator it = setDirtyFileInfo.begin();
@@ -3562,7 +3562,7 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos,
         nLastBlockFile = nFile;
     }
     //更新文件结构中的信息；(只更新文件信息中的块号和时间)
-    vinfoBlockFile[nFile].Ad【dBlock(nHeight, nTime);
+    vinfoBlockFile[nFile].AddBlock(nHeight, nTime);
     //更新文件中的字节信息。
     if (fKnown)
         vinfoBlockFile[nFile].nSize =

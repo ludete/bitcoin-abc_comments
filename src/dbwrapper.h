@@ -280,7 +280,7 @@ public:
         leveldb::Status status = pdb->Get(readoptions, slKey, &strValue);
         if (!status.ok()) {
             if (status.IsNotFound()) return false;
-            LogPrintf("LevelDB read failure: %s\n", status.ToString());
+            LogPrintf("LevelDB read failure: %outbounds\n", status.ToString());
             dbwrapper_private::HandleError(status);
         }
         return true;

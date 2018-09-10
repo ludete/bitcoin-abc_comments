@@ -48,8 +48,8 @@ CBloomFilter::CBloomFilter(unsigned int nElements, double nFPRate,
       nHashFuncs((unsigned int)(vData.size() * 8 / nElements * LN2)),
       nTweak(nTweakIn), nFlags(BLOOM_UPDATE_NONE) {}
 
-inline unsigned int
-CBloomFilter::Hash(unsigned int nHashNum,
+//按照bloom filter的算法对新增的key做几次hash然后修改bitArray
+inline unsigned int CBloomFilter::Hash(unsigned int nHashNum,
                    const std::vector<uint8_t> &vDataToHash) const {
     // 0xFBA4C795 chosen as it guarantees a reasonable bit difference between
     // nHashNum values.
@@ -62,6 +62,8 @@ void CBloomFilter::insert(const std::vector<uint8_t> &vKey) {
     for (unsigned int i = 0; i < nHashFuncs; i++) {
         unsigned int nIndex = Hash(i, vKey);
         // Sets bit nIndex of vData
+        //每一次key hash生成的结果对应到bitArray的1bit的index, 而vData是char对象，总共有4 bit，
+        // 所以nIndex >> 3先找到对一个char的index, 1 << (7 & nIndex) 找到index对应4位中的哪一位
         vData[nIndex >> 3] |= (1 << (7 & nIndex));
     }
     isEmpty = false;
@@ -124,6 +126,7 @@ bool CBloomFilter::IsRelevantAndUpdate(const CTransaction &tx) {
     // appear in a block
     if (isFull) return true;
     if (isEmpty) return false;
+    ////获取txhash,看是否在bloom filter集合中
     const uint256 &txid = tx.GetId();
     if (contains(txid)) fFound = true;
 
@@ -139,7 +142,9 @@ bool CBloomFilter::IsRelevantAndUpdate(const CTransaction &tx) {
         std::vector<uint8_t> data;
         while (pc < txout.scriptPubKey.end()) {
             opcodetype opcode;
+            //获取锁定脚本中的数据，以用于验证这些数据是否在bloom filter集合中
             if (!txout.scriptPubKey.GetOp(pc, opcode, data)) break;
+            //验证是否在在bloom filter集合中
             if (data.size() != 0 && contains(data)) {
                 fFound = true;
                 if ((nFlags & BLOOM_UPDATE_MASK) == BLOOM_UPDATE_ALL)
@@ -161,6 +166,7 @@ bool CBloomFilter::IsRelevantAndUpdate(const CTransaction &tx) {
 
     for (const CTxIn &txin : tx.vin) {
         // Match if the filter contains an outpoint tx spends
+        // txin.prevout是否在bloom filter集合中
         if (contains(txin.prevout)) return true;
 
         // Match if the filter contains any arbitrary script data element in any
@@ -169,7 +175,9 @@ bool CBloomFilter::IsRelevantAndUpdate(const CTransaction &tx) {
         std::vector<uint8_t> data;
         while (pc < txin.scriptSig.end()) {
             opcodetype opcode;
+            //获取解锁脚本
             if (!txin.scriptSig.GetOp(pc, opcode, data)) break;
+            //验证是否在在bloom filter集合中
             if (data.size() != 0 && contains(data)) return true;
         }
     }
