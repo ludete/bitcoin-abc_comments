@@ -44,26 +44,27 @@
  * or from the last difficulty change if 'lookup' is nonpositive. If 'height' is
  * nonnegative, compute the estimate at the time when a given block was found.
  */
-static UniValue GetNetworkHashPS(int lookup, int height) {
-    CBlockIndex *pb = chainActive.Tip();
+// 返回基于最新发现的块每秒的平均网络哈希，或若发现是非正则返回最新的难度改变。若高度非负，计算找到一个给定区块时的估计值
+static UniValue GetNetworkHashPS(int lookup, int height) { // 默认 (120, -1)
+    CBlockIndex *pb = chainActive.Tip();// 获取链尖区块索引
 
-    if (height >= 0 && height < chainActive.Height()) {
-        pb = chainActive[height];
+    if (height >= 0 && height < chainActive.Height()) {// 若指定高度符合当前链高度范围
+        pb = chainActive[height]; // 获取对应高度的区块索引
     }
 
-    if (pb == nullptr || !pb->nHeight) {
+    if (pb == nullptr || !pb->nHeight) {// 索引为空 或 为创世区块索引
         return 0;
     }
 
     // If lookup is -1, then use blocks since last difficulty change.
-    if (lookup <= 0) {
+    if (lookup <= 0) {// 若发现是 -1，则使用从上次难度改变后的区块
         lookup = pb->nHeight %
                      Params().GetConsensus().DifficultyAdjustmentInterval() +
                  1;
     }
 
     // If lookup is larger than chain, then set it to chain length.
-    if (lookup > pb->nHeight) {
+    if (lookup > pb->nHeight) {// 若发现大于链高度，则设置为链高度
         lookup = pb->nHeight;
     }
 
@@ -74,26 +75,34 @@ static UniValue GetNetworkHashPS(int lookup, int height) {
         pb0 = pb0->pprev;
         int64_t time = pb0->GetBlockTime();
         minTime = std::min(time, minTime);
-        maxTime = std::max(time, maxTime);
+        maxTime = std::max(time, maxTime);// 获取最小创建区块时间
     }
 
     // In case there's a situation where minTime == maxTime, we don't want a
     // divide by zero exception.
-    if (minTime == maxTime) {
+    if (minTime == maxTime) {// 最小和最大不能相等
         return 0;
     }
 
-    arith_uint256 workDiff = pb->nChainWork - pb0->nChainWork;
-    int64_t timeDiff = maxTime - minTime;
+    arith_uint256 workDiff = pb->nChainWork - pb0->nChainWork;// 区间首尾区块的工作量之差
+    int64_t timeDiff = maxTime - minTime;// 时间差
 
-    return workDiff.getdouble() / timeDiff;
+    return workDiff.getdouble() / timeDiff;// 转换为浮点数求平均值并返回
 }
 
+//获取基于最后 n 个区块估算的网络算力（每秒网络哈希次数）
+//（数字）返回估算的每秒网络哈希的次数（链工作量 chainwork 之差 / 时间 time 之差）
+
+//基本流程：
+//1.处理命令帮助和参数个数。
+//2.上锁。
+//3.获取指定高度及块数的算力（网络哈希/秒），并返回。
 static UniValue getnetworkhashps(const Config &config,
                                  const JSONRPCRequest &request) {
-    if (request.fHelp || request.params.size() > 2) {
+    if (request.fHelp || request.params.size() > 2) {// 参数个数最多为 2 个
         throw std::runtime_error(
-            "getnetworkhashps ( nblocks height )\n"
+            "getnetworkhashps ( nblocks "//整型，可选，默认为 120）区块的数量，-1 表示从上一次变化的难度开始。
+                    "height )\n"//整型，可选，默认为 -1 表示当前高度）给定区块链高度用于评估当某个块被找到时的网络速度。
             "\nReturns the estimated network hashes per second based on the "
             "last n blocks.\n"
             "Pass in [blocks] to override # of blocks, -1 specifies since last "
