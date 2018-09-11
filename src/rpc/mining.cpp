@@ -956,9 +956,20 @@ static UniValue submitblock(const Config &config,
     return BIP22ValidationResult(config, sc.state);
 }
 
+//估算交易在 `nblocks` 个区块开始确认的每千字节的大致费用
+//返回预估的每千字节的交易费。
+//如果没有足够的交易和区块用来估算则会返回一个负值，-1 表示交易费为 0。
+
+//基本流程：
+//1.处理命令帮助和参数个数。
+//2.参数类型检查。
+//3.获取指定的块数，最低为 1 块。
+//4.在交易内存池中通过块数预估交易费。
+//5.若预估交易费为 0，则返回 -1。
+//6.否则获取每千字节的交易费并返回。
 static UniValue estimatefee(const Config &config,
                             const JSONRPCRequest &request) {
-    if (request.fHelp || request.params.size() != 1) {
+    if (request.fHelp || request.params.size() != 1) {// 参数必须为 1 个
         throw std::runtime_error(
             "estimatefee nblocks\n"
             "\nEstimates the approximate fee per kilobyte needed for a "
@@ -980,15 +991,15 @@ static UniValue estimatefee(const Config &config,
             HelpExampleCli("estimatefee", "6"));
     }
 
-    RPCTypeCheck(request.params, {UniValue::VNUM});
+    RPCTypeCheck(request.params, {UniValue::VNUM});// 参数类型检查
 
-    int nBlocks = request.params[0].get_int();
-    if (nBlocks < 1) {
+    int nBlocks = request.params[0].get_int();// 获取指定的块数
+    if (nBlocks < 1) {// 块数最低为 1
         nBlocks = 1;
     }
 
-    CFeeRate feeRate = mempool.estimateFee(nBlocks);
-    if (feeRate == CFeeRate(0)) {
+    CFeeRate feeRate = mempool.estimateFee(nBlocks);// 交易内存池预估交易费（根据区块数）
+    if (feeRate == CFeeRate(0)) {// 若交易费为 0
         return -1.0;
     }
 
