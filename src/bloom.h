@@ -22,11 +22,11 @@ static const unsigned int MAX_HASH_FUNCS = 50;
  * updates. The remaining bits are reserved.
  */
 enum bloomflags {
-    BLOOM_UPDATE_NONE = 0,
-    BLOOM_UPDATE_ALL = 1,
+    BLOOM_UPDATE_NONE = 0,//表示找到匹配项时不调整过滤器
+    BLOOM_UPDATE_ALL = 1,//如果过滤器与scriptPubKey中的任何数据元素匹配，则将该出口序列化并插入过滤器。
     // Only adds outpoints to the filter if the output is a
     // pay-to-pubkey/pay-to-multisig script
-    BLOOM_UPDATE_P2PUBKEY_ONLY = 2,
+    BLOOM_UPDATE_P2PUBKEY_ONLY = 2,//只有当scriptPubKey中的数据元素匹配时，才会将outpoint插入过滤器，并且该脚本具有标准的“pay to pubkey”或“pay to multisig”形式。
     BLOOM_UPDATE_MASK = 3,
 };
 

@@ -36,7 +36,7 @@ struct CoinEntry {
     template <typename Stream> void Serialize(Stream &s) const {
         s << key;
         s << outpoint->hash;
-        s << VARINT(outpoint->n);
+        s << VARINT(outpxoint->n);
     }
 
     template <typename Stream> void Unserialize(Stream &s) {

@@ -1359,7 +1359,9 @@ static void ProcessGetData(const Config &config, CNode *pfrom,
                                     CMerkleBlock(block, *pfrom->pfilter);
                             }
                         }
+                        //获取指定blockhash中满足bloom filter的block 内容
                         if (sendMerkleBlock) {
+                            // 返回merkleBlock
                             connman.PushMessage(
                                 pfrom, msgMaker.Make(NetMsgType::MERKLEBLOCK,
                                                      merkleBlock));
@@ -1376,6 +1378,7 @@ static void ProcessGetData(const Config &config, CNode *pfrom,
                             // remote peer needs.
                             typedef std::pair<unsigned int, uint256> PairType;
                             for (PairType &pair : merkleBlock.vMatchedTxn) {
+                                //返回符合filter条件的transaction 数据
                                 connman.PushMessage(
                                     pfrom,
                                     msgMaker.Make(NetMsgType::TX,

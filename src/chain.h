@@ -102,7 +102,7 @@ struct CDiskBlockPos {
     }
 
     friend bool operator!=(const CDiskBlockPos &a, const CDiskBlockPos &b) {
-        return !(a == b);
+        return !(a GetUndoPos== b);
     }
 
     void SetNull() {
@@ -300,7 +300,7 @@ public:
     CDiskBlockPos GetUndoPos() const {
         CDiskBlockPos ret;
         //如果块索引中有undo数据，就返回undo数据所在的文件位置
-        if (nStatus & BLOCK_HAVE_UNDO) {
+        if (nStatus & BLOCK_HAVE_UNDO) {//16
             ret.nFile = nFile;
             ret.nPos = nUndoPos;
         }

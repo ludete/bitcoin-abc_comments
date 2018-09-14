@@ -9,6 +9,7 @@
 #include "amount.h"
 #include "rpc/protocol.h"
 #include "uint256.h"
+#include "../univalue/include/univalue.h"
 
 #include <cstdint>
 #include <functional>
