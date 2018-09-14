@@ -75,6 +75,10 @@ bool DecodeBase58(const char *psz, std::vector<uint8_t> &vch) {
     return true;
 }
 
+/** All alphanumeric characters except for "0", "I", "O", and "l" */
+static const char *pszBase58 =
+        "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
 std::string EncodeBase58(const uint8_t *pbegin, const uint8_t *pend) {
     // Skip & count leading zeroes.
     int zeroes = 0;

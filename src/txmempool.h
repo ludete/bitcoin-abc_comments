@@ -737,7 +737,7 @@ public:
         LOCK(cs);
         return mapTx.count(hash) != 0;
     }
-
+    0xc637c4601bb942effe5bf7f5d6551968b94da8c2
     bool exists(const COutPoint &outpoint) const {
         LOCK(cs);
         auto it = mapTx.find(outpoint.hash);

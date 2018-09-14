@@ -231,10 +231,10 @@ CCoinsViewCache *pcoinsTip = nullptr;
 CBlockTreeDB *pblocktree = nullptr;
 
 enum FlushStateMode {
-    FLUSH_STATE_NONE,
-    FLUSH_STATE_IF_NEEDED,
+    FLUSH_STATE_NONE,               //不刷新任何数据
+    FLUSH_STATE_IF_NEEDED,          //查看当前是否满足刷到磁盘的条件
     FLUSH_STATE_PERIODIC,           //定期刷新数据到磁盘
-    FLUSH_STATE_ALWAYS              //
+    FLUSH_STATE_ALWAYS              //不管是否到达条件，都将数据刷到磁盘
 };
 
 // See definition for documentation
@@ -1588,7 +1588,7 @@ int GetSpendHeight(const CCoinsViewCache &inputs) {
 }
 
 namespace Consensus {
-// 依据UTXO，检查该交易的输入金额，输出金额，交易费是否符合共识。并且如果交易输入位coinbase交易，
+// 依据UTXO，检查该交易的输入金额，输出金额，交易费是否符合共识。并且如果交易输入为coinbase交易，
 bool CheckTxInputs(const CTransaction &tx, CValidationState &state,
                    const CCoinsViewCache &inputs, int nSpendHeight) {
     // This doesn't trigger the DoS code on purpose; if it did, it would make it

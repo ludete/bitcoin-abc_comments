@@ -138,7 +138,7 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin coin,
     //8. 将这个coin插入 队组中。
     it->second.coin = std::move(coin);
     //9. 设置这个coin对应的flag，如果为新币(即UTXO集合中以前灭有的)，它的flag应该是 DIRTY|FRESH。
-    // 如果非新币，它的flag，应该或上 DIRTY。
+    // 如果非新币，它的flag，应该或上 DIRTY。  // 1 和 3
     it->second.flags |=
         CCoinsCacheEntry::DIRTY | (fresh ? CCoinsCacheEntry::FRESH : 0);
     //10. 更新UTXO的内存使用量
@@ -233,15 +233,17 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins,
         if (it->second.flags & CCoinsCacheEntry::DIRTY) {
             //在缓存中查找该UTXO是否存在
             CCoinsMap::iterator itUs = cacheCoins.find(it->first);
-            //不存在，进入该条件。
+            //不在父视图中，进入该条件。
             if (itUs == cacheCoins.end()) {
                 // The parent cache does not have an entry, while the child does
                 // We can ignore it if it's both FRESH and pruned in the child
-                // 父缓存中没有这个条目，如果该条目的孩子同时处于FRESH 和 修改状态，同时可以忽略孩子。
+                // 父缓存中没有这个条目，如果该条目的孩子同时处于FRESH 和 花费了的状态，可以忽略该条目。
                 if (!(it->second.flags & CCoinsCacheEntry::FRESH &&
                       it->second.coin.IsSpent())) {
                     // Otherwise we will need to create it in the parent and
                     // move the data up and mark it as dirty
+                    // 不存在与父视图中，且将该条目未被设置为 FRESH，或未花费； 则将该条目插入父视图的缓存中
+                    // 注意：此时entry的Flag为0；下面给它设置为DIRTY。
                     CCoinsCacheEntry &entry = cacheCoins[it->first];
                     entry.coin = std::move(it->second.coin);
                     cachedCoinsUsage += entry.coin.DynamicMemoryUsage();
@@ -249,14 +251,17 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins,
                     // We can mark it FRESH in the parent if it was FRESH in the
                     // child. Otherwise it might have just been flushed from the
                     // parent's cache and already exist in the grandparent
+                    // 如果它被设置为FRESH，则也可以在父视图的缓存中设置它为FRESH。
                     if (it->second.flags & CCoinsCacheEntry::FRESH)
                         entry.flags |= CCoinsCacheEntry::FRESH;
                 }
             } else {
+                //存在于父视图中
                 // Assert that the child cache entry was not marked FRESH if the
                 // parent cache entry has unspent outputs. If this ever happens,
                 // it means the FRESH flag was misapplied and there is a logic
                 // error in the calling code.
+                // 该Flag设置为FRESH；并且该coin在父缓存中未被花费
                 if ((it->second.flags & CCoinsCacheEntry::FRESH) &&
                     !itUs->second.coin.IsSpent())
                     throw std::logic_error("FRESH flag misapplied to cache "
@@ -264,6 +269,7 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins,
                                            "spendable outputs");
 
                 // Found the entry in the parent cache
+                // 父缓存中的Flag被设置为FRESH，且子缓存中的该coin被花费， 普通交易
                 if ((itUs->second.flags & CCoinsCacheEntry::FRESH) &&
                     it->second.coin.IsSpent()) {
                     // The grandparent does not have an entry, and the child is
@@ -272,6 +278,7 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins,
                     cachedCoinsUsage -= itUs->second.coin.DynamicMemoryUsage();
                     cacheCoins.erase(itUs);
                 } else {
+                    //将这个coin 移动到腹肌和中，并设置腹肌和中coin的条目为DIRTY
                     // A normal modification.
                     cachedCoinsUsage -= itUs->second.coin.DynamicMemoryUsage();
                     itUs->second.coin = std::move(it->second.coin);

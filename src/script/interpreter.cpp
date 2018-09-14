@@ -1615,6 +1615,7 @@ bool VerifyScript(const CScript &scriptSig, const CScript &scriptPubKey,
         CScript pubKey2(pubKeySerialized.begin(), pubKeySerialized.end());
         popstack(stack);
 
+        //
         if (!EvalScript(stack, pubKey2, flags, checker, serror)) {
             // serror is set
             return false;
