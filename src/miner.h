@@ -143,7 +143,7 @@ private:
     // Configuration parameters for the block size
     // 块大小的配置参数
     uint64_t nMaxGeneratedBlockSize;    //最大生成的块大小
-    CFeeRate blockMinFeeRate;           //块的最新费率
+    CFeeRate blockMinFeeRate;           //块的最xiao费率
 
     // Information on the current status of the block
     uint64_t nBlockSize;        //当前块的大小
