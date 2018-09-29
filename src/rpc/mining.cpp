@@ -33,6 +33,8 @@
 #include "protocol.h"
 #include "../core_io.h"
 #include "../consensus/consensus.h"
+#include "../validationinterface.h"
+#include "../script/standard.h"
 
 #include <univalue.h>
 
@@ -132,36 +134,36 @@ static UniValue generateBlocks(const Config &config,
                                int nGenerate, uint64_t nMaxTries,
                                bool keepScript) {
     static const int nInnerLoopCount = 0x100000;
-    int nHeightStart = 0;
-    int nHeightEnd = 0;
-    int nHeight = 0;
+    int nHeightStart = 0;// 产生块前的高度
+    int nHeightEnd = 0;// 产生块后的高度
+    int nHeight = 0;// 当前区块链高度
 
     {
         // Don't keep cs_main locked.
-        LOCK(cs_main);
-        nHeightStart = chainActive.Height();
-        nHeight = nHeightStart;
-        nHeightEnd = nHeightStart + nGenerate;
+        LOCK(cs_main);// 缩小加锁的范围
+        nHeightStart = chainActive.Height();// 7.获取当前激活链高度
+        nHeight = nHeightStart;// 记录当前高度
+        nHeightEnd = nHeightStart + nGenerate;// 得到产生指定块数后的高度
     }
 
     unsigned int nExtraNonce = 0;
-    UniValue blockHashes(UniValue::VARR);
-    while (nHeight < nHeightEnd) {
-        std::unique_ptr<CBlockTemplate> pblocktemplate(
+    UniValue blockHashes(UniValue::VARR);// 数组类型的区块哈希对象
+    while (nHeight < nHeightEnd) {// 8.循环产生指定数目的区块
+        std::unique_ptr<CBlockTemplate> pblocktemplate(// 8.1.创建区块模板
             BlockAssembler(config, Params())
                 .CreateNewBlock(coinbaseScript->reserveScript));
-        if (!pblocktemplate.get()) {
+        if (!pblocktemplate.get()) {// 8.2.验证是否创建成功
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         }
-        CBlock *pblock = &pblocktemplate->block;
+        CBlock *pblock = &pblocktemplate->block;// 获取区块指针
         {
             LOCK(cs_main);
-            IncrementExtraNonce(config, pblock, chainActive.Tip(), nExtraNonce);
+            IncrementExtraNonce(config, pblock, chainActive.Tip(), nExtraNonce);// 8.3.增加额外的随机数
         }
-        while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount &&
+        while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount &&// 8.4.检测区块是否满足工作量证明
                !CheckProofOfWork(pblock->GetHash(), pblock->nBits,
                                  Params().GetConsensus())) {
-            ++pblock->nNonce;
+            ++pblock->nNonce;// 区块头内随机数加 1
             --nMaxTries;
         }
         if (nMaxTries == 0) {
@@ -176,22 +178,24 @@ static UniValue generateBlocks(const Config &config,
             throw JSONRPCError(RPC_INTERNAL_ERROR,
                                "ProcessNewBlock, block not accepted");
         }
-        ++nHeight;
+        ++nHeight; // 增加当前高度
         blockHashes.push_back(pblock->GetHash().GetHex());
 
         // Mark script as important because it was used at least for one
         // coinbase output if the script came from the wallet.
         if (keepScript) {
-            coinbaseScript->KeepScript();
+            coinbaseScript->KeepScript();// 8.7.标记该脚本为重要，因为它至少用作一个创币输出
         }
     }
 
-    return blockHashes;
+    return blockHashes;// 9.返回产生所有区块的哈希
 }
 
+//立刻挖出区块（在 RPC 调用返回前）
+//此功能仅限回归测试网 regtest 使用。
 static UniValue generate(const Config &config, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() < 1 ||
-        request.params.size() > 2) {
+        request.params.size() > 2) {// 1.参数只能为 1 个（要生成区块的个数
         throw std::runtime_error(
             "generate nblocks ( maxtries )\n"
             "\nMine up to nblocks blocks immediately (before the RPC call "
@@ -208,24 +212,24 @@ static UniValue generate(const Config &config, const JSONRPCRequest &request) {
             HelpExampleCli("generate", "11"));
     }
 
-    int nGenerate = request.params[0].get_int();
+    int nGenerate = request.params[0].get_int();// 3.获取要产生区块的数目
     uint64_t nMaxTries = 1000000;
     if (request.params.size() > 1) {
         nMaxTries = request.params[1].get_int();
     }
 
-    std::shared_ptr<CReserveScript> coinbaseScript;
+    std::shared_ptr<CReserveScript> coinbaseScript;// 4.创建创币交易脚本
     GetMainSignals().ScriptForMining(coinbaseScript);
 
     // If the keypool is exhausted, no script is returned at all. Catch this.
-    if (!coinbaseScript) {
+    if (!coinbaseScript) {// 5.若密钥池耗尽，根本不会返回脚本。抓住它
         throw JSONRPCError(
             RPC_WALLET_KEYPOOL_RAN_OUT,
             "Error: Keypool ran out, please call keypoolrefill first");
     }
 
     // Throw an error if no script was provided.
-    if (coinbaseScript->reserveScript.empty()) {
+    if (coinbaseScript->reserveScript.empty()) {// 6.如果脚本为空，未被提供，则抛出一个错误
         throw JSONRPCError(
             RPC_INTERNAL_ERROR,
             "No coinbase script available (mining requires a wallet)");
@@ -737,7 +741,7 @@ static UniValue getblocktemplate(const Config &config,
         int index_in_template = i - 1;// 当前交易的索引序号
         entry.push_back(Pair(
             "fee", pblocktemplate->vTxFees[index_in_template].GetSatoshis()));// 交易费
-        int64_t nTxSigOps = pblocktemplate->vTxSigOpsCount[index_in_template];// 交易签名操作
+        int64_t nTxSigOps = pblocktemplate->vTxSigOpsCount[index_in_template];// 交易签名操作 //？todo：
         entry.push_back(Pair("sigops", nTxSigOps));
 
         transactions.push_back(entry);
@@ -827,7 +831,7 @@ static UniValue getblocktemplate(const Config &config,
     }
 
     result.push_back(Pair("previousblockhash", pblock->hashPrevBlock.GetHex()));//前一个区块hash
-    result.push_back(Pair("transactions", transactions));//交易
+    result.push_back(Pair("trxansactions", transactions));//交易
     result.push_back(Pair("coinbaseaux", aux));
     result.push_back(
         Pair("coinbasevalue",
