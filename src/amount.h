@@ -39,6 +39,9 @@ public:
         return *this;
     }
 
+    // Allow access to underlying value for non-monetary operations
+    int64_t GetSatoshis() const { return *this / Amount(1); }
+
     /**
      * Equality
      */

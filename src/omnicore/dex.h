@@ -34,7 +34,8 @@ inline std::string STR_PAYMENT_SUBKEY_TXID_PAYMENT_COMBO(const std::string& txid
 /** Lookup key to find MetaDEx sub-records. TODO: not here! */
 inline std::string STR_REF_SUBKEY_TXID_REF_COMBO(const std::string& txidStr, unsigned int refNumber)
 {
-    return strprintf("%s%d", txidStr, refNumber);
+    return strprintf("%s%d", txidStr, refNumber);171
+
 }
 
 /** A single outstanding offer, from one seller of one property.
